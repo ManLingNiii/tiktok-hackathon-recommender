@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+data/
+KuaiRand-Pure/data/
+*.csv
+*.tar.gz
+*.zip
+outputs/
+submission.csv
+predictions.csv
+.DS_Store
+
