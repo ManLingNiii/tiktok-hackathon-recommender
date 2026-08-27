@@ -1,0 +1,11 @@
+{
+  "dataset": "KuaiRand-Pure",
+  "target": "long_view",
+  "metrics": ["GAUC", "nDCG@5"],
+  "primary": "mean",
+  "epsilon": 0.002,
+  "convergence_rounds": 3,
+  "max_iterations": 8,
+  "max_retries": 2,
+  "hidden_test_access": false
+}

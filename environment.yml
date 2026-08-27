@@ -1,0 +1,9 @@
+name: tiktok
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pip
+  - pip:
+      - google-genai

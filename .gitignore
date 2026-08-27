@@ -1,0 +1,24 @@
+# Local datasets and archives
+kuairand-starter-kit/KuaiRand-Pure/data/
+*.tar.gz
+
+# Secrets and local environments
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.venv/
+__pycache__/
+*.py[cod]
+
+# Generated experiments and model artifacts
+runs/
+outputs/
+*.npz
+*.csv
+*.pid
+*.err
+*.out
+
+# Keep curated documentation and source code tracked.

@@ -1,0 +1,15 @@
+{
+  "target": "long_view",
+  "metrics": ["GAUC", "nDCG@5"],
+  "development_splits": ["train", "valid"],
+  "forbidden_splits": ["test"],
+  "allowed_modules": [
+    "bpr_loss",
+    "listwise_loss",
+    "history_features",
+    "multitask",
+    "censored_watch_time"
+  ],
+  "allowed_paths": ["agent/modules/", "agent/configs/"],
+  "forbidden_paths": ["kuairand-starter-kit/evaluate.py", "hidden_test"]
+}

@@ -1,0 +1,30 @@
+{
+  "baseline_fm": {
+    "module": "baseline_fm",
+    "description": "Official FM baseline, validation-only",
+    "command": ["agent/validation_only.py"],
+    "allowed": true
+  },
+  "bpr_fm": {
+    "module": "bpr_loss",
+    "description": "Pairwise BPR gradient update for FM, validation-only",
+    "command": ["agent/experiments/bpr_fm.py"],
+    "allowed": true
+  },
+  "listwise_fm": {
+    "module": "listwise_loss", "description": "User-exposure listwise softmax gradient, validation-only",
+    "command": ["agent/formal_trainer.py", "--mode", "listwise"], "allowed": true
+  },
+  "history_fm": {
+    "module": "history_features", "description": "Train-only prior user history feature domains, validation-only",
+    "command": ["agent/formal_trainer.py", "--mode", "history"], "allowed": true
+  },
+  "multitask_fm": {
+    "module": "multitask", "description": "Shared FM with real auxiliary feedback heads, validation-only",
+    "command": ["agent/formal_trainer.py", "--mode", "multitask"], "allowed": true
+  },
+  "cwm_fm": {
+    "module": "censored_watch_time", "description": "Normalized censored watch-time objective, validation-only",
+    "command": ["agent/formal_trainer.py", "--mode", "cwm"], "allowed": true
+  }
+}
