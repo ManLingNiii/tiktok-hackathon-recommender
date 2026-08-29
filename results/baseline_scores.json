@@ -1,5 +1,7 @@
 {
   "dataset": "KuaiRand-Pure",
+  "split_version": "v1",
+  "seed": 0,
   "label": "long_view",
   "task": "within-user ranking over logged impressions",
   "split": {

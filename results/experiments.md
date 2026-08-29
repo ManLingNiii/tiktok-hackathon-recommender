@@ -83,4 +83,21 @@ TBD 代表實驗還沒完成，完成後填入結果。
 | 4 | 0.6673 | 0.5354 | 0.6013 | 0.6608 | 0.5285 | 0.5947 |
 
 - Conclusion: BPR did not consistently outperform the official FM baseline across seeds 0 and 4.
-- Status: Completed
+- Status: WIP / historical result; not a finalized BPR result
+
+## Shared experiment record template
+
+For each run, record:
+
+- Track
+- Experiment ID
+- Method
+- Hyperparameters
+- Seed
+- Best epoch
+- Valid GAUC
+- Valid nDCG@5
+- Valid primary
+- Checkpoint
+- Git commit
+- Notes

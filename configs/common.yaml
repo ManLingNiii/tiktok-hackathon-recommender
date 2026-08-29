@@ -1,0 +1,5 @@
+# Shared team rules. Individual tracks may keep their own runtime settings.
+dataset: pure
+seed: 0
+split_version: v1
+primary_metric: primary
