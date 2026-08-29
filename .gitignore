@@ -21,4 +21,31 @@ outputs/
 *.err
 *.out
 
+# Archived raw experiment records are local evidence; keep only the curated summary.
+test/experiment_records/*
+!test/experiment_records/EXPERIMENT_SUMMARY.md
+
+# Imported integration bundle is a local transfer artifact, not source.
+listwise_model_integration_bundle.zip
+
 # Keep curated documentation and source code tracked.
+
+# Frozen Pure submission assets are intentionally versioned with Git LFS so a
+# fresh clone can run submission_ready without a separate checkpoint transfer.
+!outputs/
+!outputs/pure/
+!outputs/pure/baseline_fm_best.npz
+!outputs/pure/bpr_fm_best.npz
+!outputs/pure/cwm_fm_best.npz
+!outputs/pure/history_fm_best.npz
+!outputs/pure/listwise_fm_best.npz
+!outputs/pure/multitask_fm_best.npz
+!outputs/pure/listwise_external_warmstart.npz
+!outputs/pure/listwise_bundle_bpr_member.npz
+!outputs/pure/listwise_bundle_pointwise_member.npz
+!outputs/pure/listwise_bundle_reference_member.npz
+!outputs/pure/listwise_bundle_validation_member.npz
+
+# Other output summaries remain local and are not part of the frozen package.
+outputs/baseline_scores.json
+outputs/baseline_scores.txt

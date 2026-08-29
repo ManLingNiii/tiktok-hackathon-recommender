@@ -1,15 +1,38 @@
-"""Safe Gemini planner: Chat API only, no arbitrary command execution."""
+"""Planner boundary with a local deterministic backend for offline rehearsal.
+
+Set PLANNER_BACKEND=gemini to use Google Gemini after the local loop is proven.
+"""
 import json
 import os
 import re
 import time
 
-from google import genai
-
 from experiment_registry import validate_plan
+from config_generator import config_candidates, config_catalog
 
 
-ALLOWED_EXPERIMENTS = "listwise_fm, history_fm, multitask_fm, cwm_fm"
+ALLOWED_EXPERIMENTS = "bpr_fm, listwise_fm, listwise_ensemble, history_fm, multitask_fm, cwm_fm"
+LOCAL_PLANS = [
+    ("bpr_loss", "bpr_fm"), ("listwise_loss", "listwise_fm"),
+    ("listwise_ensemble", "listwise_ensemble"),
+    ("history_features", "history_fm"), ("multitask", "multitask_fm"),
+    ("censored_watch_time", "cwm_fm"),
+]
+SEARCH_SPACE = os.path.join(os.path.dirname(__file__), "configs", "search_space.json")
+
+
+def research_context():
+    path = os.environ.get("LEADERBOARD_PATH", "runs/validation_leaderboard.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            board = json.load(fh)
+        rows = [{"experiment": x.get("experiment"), "config": x.get("config", {}), "metrics": x.get("metrics"),
+                 "status": x.get("status"), "recovery_events": x.get("recovery_events", [])}
+                for x in board.get("experiments", [])]
+        return {"epsilon": board.get("epsilon", 0.002), "best": board.get("best", {}).get("experiment"),
+                "experiments": rows[-20:]}
+    except (OSError, json.JSONDecodeError):
+        return {"epsilon": 0.002, "best": None, "experiments": []}
 
 
 def parse_json_response(text):
@@ -36,6 +59,34 @@ def parse_json_response(text):
 
 
 def propose_next_experiment(model="gemini-3.7-flash"):
+    excluded = {x.strip() for x in os.environ.get("PLANNER_EXCLUDE", "").split(",") if x.strip()}
+    promoted = {x.strip() for x in os.environ.get("PLANNER_PROMOTED", "").split(",") if x.strip()}
+    context = research_context()
+    if os.environ.get("PLANNER_BACKEND", "local").lower() == "local":
+        scores = {x[1]: [] for x in LOCAL_PLANS}
+        for row in context["experiments"]:
+            if row.get("experiment") in scores and row.get("metrics", {}).get("primary") is not None:
+                scores[row["experiment"]].append(row["metrics"]["primary"])
+        # Prefer unexplored experiments; once a family has history, prioritize
+        # the weakest result for a targeted follow-up rather than fixed order.
+        available = [(module, experiment, config["name"])
+                     for module, experiment in LOCAL_PLANS
+                     for config in config_candidates(experiment)
+                     if experiment not in promoted
+                     and f"{experiment}:{config['name']}" not in excluded]
+        available.sort(key=lambda item: (bool(scores[item[1]]),
+                                         min(scores[item[1]]) if scores[item[1]] else float("inf")))
+        if available:
+            module, experiment, config = available[0]
+            plan = {"module": module, "experiment": experiment,
+                    "splits": ["train", "valid"],
+                    "files": ["agent/experiment_specs.json"],
+                    "config": config,
+                    "strategy": "explore_untried_then_follow_up_weakest_primary"}
+            validate_plan(plan)
+            return plan
+        raise RuntimeError("local planner exhausted current configs for unpromoted experiments")
+    from google import genai
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not set in this terminal")
@@ -43,10 +94,15 @@ def propose_next_experiment(model="gemini-3.7-flash"):
     models = [model] + [x.strip() for x in os.environ.get(
         "GEMINI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-2.0-flash"
     ).split(",") if x.strip() and x.strip() != model]
+    catalog = config_catalog([experiment for _, experiment in LOCAL_PLANS])
     prompt = (
-        "Return JSON only with keys module, experiment, splits, files. "
+        "Return JSON only with keys module, experiment, splits, files, config. "
         f"Choose exactly one experiment from: {ALLOWED_EXPERIMENTS}. "
-        "Target is long_view. Use train and valid only. "
+        f"Choose one registered config from this per-experiment catalog: {json.dumps(catalog)}. "
+        f"Do not choose these already-tried experiment/config keys: {sorted(excluded)}. "
+        f"Already-promoted model families: {sorted(promoted)}; continue training all others. "
+        f"Research context from validation only: {json.dumps(context, ensure_ascii=False)}. "
+        "Return a registered config name in the config key. Target is long_view. Use train and valid only. "
         "Do not propose test, hidden_test, arbitrary commands, or evaluator changes."
     )
     errors = []

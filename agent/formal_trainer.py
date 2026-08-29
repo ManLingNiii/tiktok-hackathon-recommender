@@ -13,9 +13,22 @@ from baseline import FM, sigmoid
 from data import encode
 from evaluate import evaluate
 from modules.loss_adapter import listwise_logit_gradient, normalize_watch_time
+from modules.listwise_loss import complete_user_batches, grouped_listwise_gradient
+from modules.listwise_ensemble import MEMBERS, predict_ensemble
 from rich_data import load_rich, encode_rich
+from modules.headroom_modules import MultiTaskModule
+try:
+    from checkpoint_manager import load_best_parameters, save_if_best
+    from validation_guard import evaluate_confirmation
+except ImportError:
+    from agent.checkpoint_manager import load_best_parameters, save_if_best
+    from agent.validation_guard import evaluate_confirmation
 
-DATA = os.path.join(KIT, "KuaiRand-Pure", "data")
+try:
+    from dataset_config import data_dir, dataset_name, runs_dir, outputs_dir
+except ImportError:
+    from agent.dataset_config import data_dir, dataset_name, runs_dir, outputs_dir
+DATA = data_dir()
 
 class GradientFM(FM):
     def apply_logit_gradient(self, X, grad):
@@ -30,6 +43,35 @@ class GradientFM(FM):
             P-=self.lr*(M/(1-b1**self.t))/(np.sqrt(V/(1-b2**self.t))+eps)
         self.b -= self.lr*float(np.sum(g))
 
+    def step_bpr(self, Xp, Xn):
+        """Apply the reviewed BPR update used by the standalone BPR family."""
+        zp, Ep, Sp = self.logits(Xp); zn, En, Sn = self.logits(Xn)
+        batch = max(len(zp), 1)
+        g = (sigmoid(zn - zp) / batch).astype(np.float32)
+        gV = np.zeros_like(self.V); gW = np.zeros_like(self.W)
+        np.add.at(gW, Xp, -g[:, None]); np.add.at(gW, Xn, g[:, None])
+        np.add.at(gV, Xp, -g[:, None, None] * (Sp[:, None, :] - Ep))
+        np.add.at(gV, Xn, g[:, None, None] * (Sn[:, None, :] - En))
+        gV += self.l2 * self.V; gW += self.l2 * self.W
+        self.t += 1; b1, b2, eps = .9, .999, 1e-8
+        for P, G, M, VV in ((self.V, gV, self.mV, self.vV),
+                            (self.W, gW, self.mW, self.vW)):
+            M *= b1; M += (1-b1) * G; VV *= b2; VV += (1-b2) * (G*G)
+            P -= self.lr * (M/(1-b1**self.t)) / (np.sqrt(VV/(1-b2**self.t))+eps)
+        # The score difference has no bias gradient.
+        return float(np.mean(-np.log(np.maximum(sigmoid(zp-zn), 1e-8))))
+
+class DualHeadFM(GradientFM):
+    """Shared FM interaction factors plus an isolated auxiliary head."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.auxW = np.zeros_like(self.W)
+    def aux_predict(self, X):
+        z, _, _ = self.logits(X)
+        return z - self.W[X].sum(1) + self.auxW[X].sum(1)
+    def apply_aux_gradient(self, X, grad):
+        np.add.at(self.auxW, X, -self.lr * np.asarray(grad, dtype=np.float32)[:, None])
+
 def history_rows(rows):
     """Return rows with train-only prior counts; current label is added last."""
     user,tab,author={}, {}, {}; out=[]
@@ -39,50 +81,171 @@ def history_rows(rows):
         user[uid]=user.get(uid,0)+int(y); tab[kt]=tab.get(kt,0)+int(y); author[ka]=author.get(ka,0)+int(y)
     return out
 
-def train(mode="listwise", limit=None, epochs=8, seed=0):
+def _listwise_batches(users, batch_size, rng):
+    """Build batches that never split a user's exposure group."""
+    users = np.asarray(users, dtype=object)
+    order = np.argsort(users, kind="stable")
+    starts = np.r_[0, 1 + np.flatnonzero(users[order][1:] != users[order][:-1])]
+    ends = np.r_[starts[1:], len(order)]
+    groups = [order[s:e] for s, e in zip(starts, ends)]
+    # Shuffle whole groups, never individual rows, so each softmax sees the
+    # same user's complete exposure list.
+    current = []
+    current_size = 0
+    for group_index in rng.permutation(len(groups)):
+        group = groups[group_index]
+        if current and current_size + len(group) > batch_size:
+            yield np.concatenate(current)
+            current = []
+            current_size = 0
+        if len(group) <= batch_size:
+            current.append(group)
+            current_size += len(group)
+        else:
+            if current:
+                yield np.concatenate(current)
+                current = []
+                current_size = 0
+            for start in range(0, len(group), batch_size):
+                yield group[start:start + batch_size]
+    if current:
+        yield np.concatenate(current)
+
+
+def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patience=None):
+    cfg = json.loads(os.environ.get("AGENT_MODEL_CONFIG", "{}"))
+    k = int(cfg.get("k", 16)); lr = float(cfg.get("lr", .001)); l2 = float(cfg.get("l2", 1e-6))
+    epochs = int(cfg.get("epochs", epochs)); batch_size = int(cfg.get("batch_size", batch_size))
+    patience = int(cfg.get("patience", 3 if patience is None else patience))
     train_rows,valid_rows=load_rich(DATA)
     if limit: train_rows=train_rows[:limit]; valid_rows=valid_rows[:max(1000,limit//4)]
-    et,ev,dim=encode_rich(train_rows,valid_rows,include_history=True)
+    # History is a separate reviewed ablation; keep multitask comparable to
+    # the official FM/BPR feature space instead of mixing two hypotheses.
+    history_cap = int(cfg.get("history_cap", 20))
+    history_transform = cfg.get("history_transform", "clip")
+    et,ev,dim=encode_rich(train_rows,valid_rows,include_history=(mode=="history"),
+                           history_cap=history_cap, history_transform=history_transform)
     Xtr,ytr,train_users,aux_tr,play_tr,dur_tr=et; Xva,yva,users,_,_,_=ev
-    m=GradientFM(dim,k=16,lr=.001,seed=seed); rng=np.random.default_rng(seed)
+    if mode == "listwise_ensemble":
+        scores = predict_ensemble(ROOT, FM, dim, Xva)
+        va = evaluate(users, yva, scores)
+        confirmation = evaluate_confirmation(users, yva, scores)
+        return {"experiment":"listwise_ensemble", "dataset":dataset_name(), "status":"success",
+                "split":"validation_only", "test_access":False,
+                "metrics":{k:float(v) for k,v in va.items()},
+                "confirmation_metrics":{k:float(v) for k,v in confirmation.items()},
+                "members":[{"checkpoint":p,"weight":w} for p,w in MEMBERS]}
+    seed = int(cfg.get("seed", seed))
+    model_cls = DualHeadFM if cfg.get("architecture") == "dual_head" and mode == "multitask" else GradientFM
+    m=model_cls(dim,k=k,lr=lr,l2=l2,seed=seed); rng=np.random.default_rng(seed)
+    warmstart_loaded = False
+    warmstart_note = None
+    if os.environ.get("AGENT_USE_PRETRAINED", "0") == "1":
+        pretrained = None
+        if mode == "listwise":
+            default_warmstart = os.path.join(outputs_dir(), "listwise_external_warmstart.npz")
+            warmstart = cfg.get("pretrained") or default_warmstart
+            if not os.path.isabs(warmstart):
+                warmstart = os.path.join(ROOT, warmstart)
+            if os.path.exists(warmstart):
+                with np.load(warmstart, allow_pickle=False) as saved:
+                    if saved["V"].shape == m.V.shape and saved["W"].shape == m.W.shape:
+                        m.V[...] = saved["V"]; m.W[...] = saved["W"]; m.b = np.float32(saved["b"])
+                        warmstart_loaded = True
+                        pretrained = False
+                    else:
+                        # A generated config may intentionally change k.  Do
+                        # not make a valid candidate fatal just because an
+                        # optional warm-start has a different shape.
+                        warmstart_note = "skipped_incompatible_listwise_warmstart"
+        if pretrained is not False:
+            pretrained = load_best_parameters(mode + "_fm")
+        if pretrained and pretrained["V"].shape == m.V.shape and pretrained["W"].shape == m.W.shape:
+            m.V[...] = pretrained["V"]; m.W[...] = pretrained["W"]; m.b = np.float32(pretrained["b"])
+    multitask = MultiTaskModule(auxiliary_weights={"is_click": 1.0}, primary_weight=0.95)
     best=-1.; state=None; bad=0
-    for ep in range(1,epochs+1):
-        idx=rng.permutation(len(ytr)); losses=[]
-        for start in range(0,len(idx),8192):
-            ix=idx[start:start+8192]; scores=m.predict(Xtr[ix]); grad=sigmoid(scores)-ytr[ix]
-            if mode=="listwise":
-                # Vectorized softmax by user within this batch. Sorting once avoids
-                # the previous Python nested scan over every exposure.
-                gu=np.asarray([train_users[j] for j in ix],dtype=object)
-                order=np.argsort(gu,kind="stable"); sorted_u=gu[order]
-                starts=np.r_[0,1+np.flatnonzero(sorted_u[1:]!=sorted_u[:-1])]
-                ends=np.r_[starts[1:],len(order)]
-                ss=scores[order]; yy=ytr[ix][order]
-                mx=np.maximum.reduceat(ss,starts)
-                ee=np.exp(ss-np.repeat(mx,ends-starts))
-                denom=np.add.reduceat(ee,starts)
-                grad_sorted=ee/np.repeat(denom,ends-starts)
-                sums=np.add.reduceat(yy,starts)
-                grad_sorted-=yy/np.repeat(np.maximum(sums,1.0),ends-starts)
-                grad=np.empty_like(grad_sorted); grad[order]=grad_sorted
-            elif mode=="multitask":
-                # Shared FM head with real auxiliary feedback labels. The weighted
-                # auxiliary residual backpropagates through the shared representation.
-                weights={"is_click":.10,"is_like":.10,"is_follow":.05,"is_comment":.05,"is_forward":.05}
-                aux_target=sum(w*aux_tr[k][ix] for k,w in weights.items())/sum(weights.values())
-                grad=0.7*grad+0.3*(sigmoid(scores)-aux_target)
-            elif mode=="cwm":
-                dur=dur_tr[ix]; target=normalize_watch_time(play_tr[ix],dur); pred=sigmoid(scores)
-                cens=ytr[ix]<1; grad=0.8*(pred-ytr[ix])+0.2*np.where(cens,np.minimum(0,pred-target),pred-target)
-            losses.append(float(np.mean(grad*grad))); m.apply_logit_gradient(Xtr[ix],grad)
+    if warmstart_loaded:
+        # A warm-start is a valid candidate in its own right. Fine-tuning may
+        # not replace it with a lower validation score.
+        initial_metrics = evaluate(users, yva, m.predict(Xva))
+        best = float(initial_metrics["primary"])
+        state = (m.V.copy(), m.W.copy(), m.b)
+    for ep in range(1, epochs+1):
+        losses=[]
+        if mode == "multitask" and cfg.get("primary_objective") == "bpr":
+            pos=np.flatnonzero(ytr>0); neg=np.flatnonzero(ytr<=0)
+            rng.shuffle(pos); rng.shuffle(neg); n=min(len(pos),len(neg))
+            for start in range(0, n, batch_size):
+                end=min(start+batch_size, n)
+                losses.append(m.step_bpr(Xtr[pos[start:end]], Xtr[neg[start:end]]))
+                if isinstance(m, DualHeadFM) and float(cfg.get("auxiliary_weight", 0.0)) > 0:
+                    ax=np.concatenate((pos[start:end], neg[start:end]))
+                    aux_scores=m.aux_predict(Xtr[ax])
+                    m.apply_aux_gradient(Xtr[ax], float(cfg["auxiliary_weight"]) *
+                                         (sigmoid(aux_scores)-aux_tr["is_click"][ax]))
+        else:
+            batches = (complete_user_batches(train_users,batch_size,rng) if mode=="listwise" else
+                       (rng.permutation(len(ytr))[start:start+8192]
+                        for start in range(0,len(ytr),batch_size)))
+            for ix in batches:
+                scores=m.predict(Xtr[ix]); grad=sigmoid(scores)-ytr[ix]
+                if mode=="listwise":
+                    users_batch=np.asarray([train_users[j] for j in ix],dtype=object)
+                    grad=grouped_listwise_gradient(
+                        users_batch, ytr[ix], scores,
+                        temperature=float(cfg.get("listwise_temperature",1.0)),
+                    )
+                elif mode=="multitask":
+                    bpr=np.zeros_like(grad)
+                    gu=np.asarray([train_users[j] for j in ix],dtype=object)
+                    order=np.argsort(gu,kind="stable"); su=gu[order]
+                    starts=np.r_[0,1+np.flatnonzero(su[1:]!=su[:-1])]
+                    gid=np.cumsum(np.isin(np.arange(len(order)),starts))-1; ng=int(gid[-1])+1
+                    fp=np.full(ng,len(order),np.int32); fn=fp.copy()
+                    np.minimum.at(fp,gid,np.where(ytr[ix][order]>0,np.arange(len(order)),len(order)))
+                    np.minimum.at(fn,gid,np.where(ytr[ix][order]<=0,np.arange(len(order)),len(order)))
+                    ok=(fp<len(order))&(fn<len(order)); p=order[fp[ok]]; nidx=order[fn[ok]]
+                    q=sigmoid(scores[p]-scores[nidx])-1.; bpr[p]=q; bpr[nidx]=-q
+                    pw=float(cfg.get("pointwise_weight",.70)); rw=float(cfg.get("pairwise_weight",.25)); aw=float(cfg.get("auxiliary_weight",.05))
+                    primary=pw*grad+rw*bpr; aux=sigmoid(m.aux_predict(Xtr[ix]) if isinstance(m,DualHeadFM) else scores)-aux_tr["is_click"][ix]
+                    if cfg.get("schedule")=="primary_first" and ep<=int(cfg.get("warmup_epochs",4)): aw=0.
+                    if cfg.get("gradient_policy")=="project_aux":
+                        primary_norm=float(np.dot(primary,primary))+1e-12; aux=aux-(float(np.dot(aux,primary))/primary_norm)*primary
+                    grad=primary
+                    if isinstance(m,DualHeadFM): m.apply_aux_gradient(Xtr[ix],aw*aux)
+                    else: grad=primary+aw*aux
+                elif mode=="cwm":
+                    pred=sigmoid(scores); target=normalize_watch_time(play_tr[ix],dur_tr[ix])
+                    grad=float(cfg.get("cwm_pointwise_weight",.80))*(pred-ytr[ix])+float(cfg.get("cwm_weight",.20))*np.where(ytr[ix]<1,np.minimum(0,pred-target+float(cfg.get("cwm_margin",0.))),pred-target)
+                losses.append(float(np.mean(grad*grad))); m.apply_logit_gradient(Xtr[ix],grad)
         va=evaluate(users,yva,m.predict(Xva)); print(f"{mode} epoch {ep:02d} loss {np.mean(losses):.6f} validation {va}",flush=True)
         if va["primary"]>best+1e-5: best=va["primary"]; state=(m.V.copy(),m.W.copy(),m.b); bad=0
         else: bad+=1
-        if bad>=3: break
-    m.V,m.W,m.b=state; va=evaluate(users,yva,m.predict(Xva))
-    return {"experiment":mode+"_fm","status":"success","split":"validation_only","test_access":False,
-            "metrics":{k:float(v) for k,v in va.items()},"epochs":ep}
+        if bad>=patience: break
+    m.V,m.W,m.b=state; scores=m.predict(Xva); va=evaluate(users,yva,scores)
+    confirmation=evaluate_confirmation(users,yva,scores)
+    experiment = mode + "_fm"
+    checkpoint = save_if_best(
+        experiment,
+        {"V": m.V, "W": m.W, "b": np.asarray(m.b),
+         "auxW": getattr(m, "auxW", np.zeros_like(m.W)), "config": json.dumps(cfg)},
+        va,
+        config=cfg,
+        source="agent/formal_trainer.py",
+    )
+    return {"experiment":mode+"_fm","dataset":dataset_name(),"status":"success","split":"validation_only","test_access":False,
+            "metrics":{k:float(v) for k,v in va.items()},"epochs":ep,"config":cfg,
+            "confirmation_metrics":{k:float(v) for k,v in confirmation.items()},
+            "recovery_events":([warmstart_note] if warmstart_note else []),
+            "checkpoint":checkpoint["checkpoint"],
+            "checkpoint_saved":checkpoint["checkpoint_saved"],
+            "family_best_metrics":checkpoint.get("metrics", {})}
 
 if __name__=="__main__":
-    ap=argparse.ArgumentParser(); ap.add_argument("--mode",choices=["listwise","history","multitask","cwm"],required=True); ap.add_argument("--limit",type=int); ap.add_argument("--epochs",type=int,default=8); a=ap.parse_args()
-    print(json.dumps(train(a.mode,a.limit,a.epochs),indent=2))
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--mode",choices=["listwise","listwise_ensemble","history","multitask","cwm"],required=True)
+    ap.add_argument("--limit",type=int); ap.add_argument("--epochs",type=int,default=8)
+    ap.add_argument("--patience",type=int); ap.add_argument("--batch-size",type=int,default=8192)
+    ap.add_argument("--seed",type=int,default=0)
+    a=ap.parse_args()
+    print(json.dumps(train(a.mode,a.limit,a.epochs,a.seed,a.batch_size,a.patience),indent=2))

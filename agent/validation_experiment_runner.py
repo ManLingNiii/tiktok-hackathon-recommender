@@ -4,18 +4,28 @@ The runner is deliberately deterministic and fail-closed. New experiments
 must be added to experiment_specs.json and must execute validation_only.py or
 another reviewed module; test is never a valid development split.
 """
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
+try:
+    from dataset_config import dataset_name, runs_dir
+except ImportError:
+    from agent.dataset_config import dataset_name, runs_dir
+try:
+    from headroom_interface import validate_result
+except ImportError:
+    from agent.headroom_interface import validate_result
 
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 KIT = os.path.join(ROOT, "kuairand-starter-kit")
-RUNS = os.path.join(ROOT, "runs")
+RUNS = runs_dir()
 SPECS_PATH = os.path.join(os.path.dirname(__file__), "experiment_specs.json")
 PRIMARY_RE = re.compile(r"['\"]primary['\"]:\s*([0-9.eE+-]+)")
 GAUC_RE = re.compile(r"['\"]GAUC['\"]:\s*(?:np\.float32\()?([0-9.eE+-]+)")
@@ -35,7 +45,7 @@ def validate_spec(name, spec):
     command = spec.get("command", [])
     allowed = [["agent/validation_only.py"], ["agent/experiments/bpr_fm.py"]]
     if len(command) >= 2 and command[:1] == ["agent/formal_trainer.py"]:
-        if len(command) != 3 or command[1] != "--mode" or command[2] not in {"listwise","history","multitask","cwm"}:
+        if len(command) != 3 or command[1] != "--mode" or command[2] not in {"listwise","listwise_ensemble","history","multitask","cwm"}:
             raise ValueError("invalid formal trainer mode")
     elif command not in allowed:
         raise ValueError("only reviewed validation-only modules may run")
@@ -53,6 +63,35 @@ def parse_metrics(output):
             "primary": float(matches[-1].group(1))}
 
 
+def parse_child_record(output, name):
+    decoder = json.JSONDecoder(); records = []
+    for i, char in enumerate(output):
+        if char != "{": continue
+        try:
+            value, _ = decoder.raw_decode(output[i:])
+            if isinstance(value, dict) and value.get("experiment") == name and value.get("status"):
+                records.append(value)
+        except json.JSONDecodeError:
+            continue
+    return records[-1] if records else {}
+
+
+def code_audit(run_id):
+    """Record the project code snapshot used for this validation run."""
+    status = subprocess.run(["git", "status", "--short", "--", "agent"],
+                            cwd=ROOT, text=True, capture_output=True)
+    diff = subprocess.run(["git", "diff", "--no-ext-diff", "HEAD", "--", "agent"],
+                          cwd=ROOT, text=True, capture_output=True)
+    changed_files = [line[3:] if len(line) >= 3 else line
+                     for line in status.stdout.splitlines() if line.strip()]
+    patch_path = os.path.join(RUNS, f"{run_id}_code_diff.patch")
+    with open(patch_path, "w", encoding="utf-8") as fh:
+        fh.write(diff.stdout)
+    return {"changed_files": changed_files, "patch_path": patch_path,
+            "sha256": hashlib.sha256(diff.stdout.encode("utf-8")).hexdigest(),
+            "git_status_exit_code": status.returncode}
+
+
 def run(name="baseline_fm"):
     specs = load_specs()
     if name not in specs:
@@ -61,14 +100,25 @@ def run(name="baseline_fm"):
     validate_spec(name, spec)
     os.makedirs(RUNS, exist_ok=True)
     start = time.time()
+    run_id = (f"{dataset_name()}-"
+              f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-"
+              f"{name}-{uuid.uuid4().hex[:8]}")
+    audit = code_audit(run_id)
+    planner_raw = os.environ.get("AGENT_PLANNER_DECISION")
+    try:
+        planner_decision = json.loads(planner_raw) if planner_raw else None
+    except json.JSONDecodeError:
+        planner_decision = {"raw": planner_raw, "parse_error": True}
     recovery_events = []
     try:
         proc = subprocess.run(
             [sys.executable, "-u", *spec["command"]],
-            cwd=ROOT, text=True, capture_output=True, timeout=600,
+            cwd=ROOT, text=True, capture_output=True,
+            timeout=3600 if dataset_name() in {"1k", "kuairand_1k"} else 1200,
+            env={**os.environ, "AGENT_MODEL_CONFIG": os.environ.get("AGENT_MODEL_CONFIG", "{}")},
         )
     except subprocess.TimeoutExpired as exc:
-        recovery_events.append("timeout_after_600_seconds")
+        recovery_events.append("timeout_after_1200_seconds")
         proc = subprocess.CompletedProcess([], 124, exc.stdout or "", exc.stderr or "")
     output = proc.stdout + proc.stderr
     iteration = len([x for x in os.listdir(RUNS) if x.startswith("experiment_") and x.endswith(".json")])
@@ -76,26 +126,56 @@ def run(name="baseline_fm"):
     with open(log_path, "w", encoding="utf-8") as fh:
         fh.write(output)
     record = {
+        "run_id": run_id,
         "iteration": iteration,
         "experiment": name,
+        "dataset": dataset_name(),
         "hypothesis": spec["description"],
         "split": "validation_only",
         "status": "success" if proc.returncode == 0 else "failed",
         "returncode": proc.returncode,
         "metrics": None,
+        "changed_files": audit["changed_files"],
+        "code_diff": audit,
+        "model_configuration": json.loads(os.environ.get("AGENT_MODEL_CONFIG", "{}")),
         "manual_interventions": 0,
         "recovery_events": recovery_events,
+        "recovery_event": recovery_events,
+        "error": None,
+        "planner_decision": planner_decision,
         "test_access": False,
         "duration_seconds": round(time.time() - start, 2),
+        "runtime": round(time.time() - start, 2),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
     if proc.returncode == 0:
         try:
-            record["metrics"] = parse_metrics(output)
+            child = parse_child_record(output, name)
+            record["metrics"] = child.get("metrics") or parse_metrics(output)
+            for key in ("config", "checkpoint", "checkpoint_saved", "family_best_metrics",
+                        "confirmation_metrics", "members", "checkpoint_members"):
+                if key in child:
+                    record[key] = child[key]
+            record["model_configuration"] = child.get("config", record["model_configuration"])
+            if child.get("checkpoint"):
+                record["checkpoint_path"] = child["checkpoint"]
+            elif child.get("members"):
+                record["checkpoint_path"] = "bundle://listwise_ensemble"
+                record["checkpoint_members"] = child["members"]
+            if child:
+                validate_result({**record, "status": "success",
+                                 "checkpoint": child.get("checkpoint", record.get("checkpoint")),
+                                 "checkpoint_saved": child.get("checkpoint_saved", False),
+                                 "family_best_metrics": child.get("family_best_metrics", record["metrics"])})
         except ValueError as exc:
             record["status"] = "failed"
             record["returncode"] = 2
             record["recovery_events"].append(str(exc))
+            record["recovery_event"] = record["recovery_events"]
+            record["error"] = str(exc)
+    elif proc.returncode != 0:
+        record["error"] = (proc.stderr or proc.stdout or "runner failed")[-4000:]
+        record["recovery_event"] = record["recovery_events"]
     # Keep a small machine-readable leaderboard for Gemini/team review.
     history = []
     for filename in os.listdir(RUNS):

@@ -1,6 +1,10 @@
 """Train/validation-only rich loader with leakage-safe history domains."""
 import csv, os
 import numpy as np
+try:
+    from dataset_config import dataset_name
+except ImportError:
+    from agent.dataset_config import dataset_name
 
 FIELDS = ["user_id","video_id","author_id","tab","dur_bucket",
           "user_hist","user_tab_hist","user_author_hist"]
@@ -8,16 +12,17 @@ AUX = ["is_click","is_like","is_follow","is_comment","is_forward"]
 
 def load_rich(data_dir):
     authors={}
-    with open(os.path.join(data_dir,"video_features_basic_pure.csv"),encoding="utf-8") as f:
+    suffix = "_1k" if dataset_name() in {"1k", "kuairand_1k"} else "_pure"
+    with open(os.path.join(data_dir,f"video_features_basic{suffix}.csv"),encoding="utf-8") as f:
         for r in csv.DictReader(f): authors[r["video_id"]]=r["author_id"]
     tr,va=[],[]
-    for fn in ("log_standard_4_08_to_4_21_pure.csv","log_standard_4_22_to_5_08_pure.csv"):
+    for fn in (f"log_standard_4_08_to_4_21{suffix}.csv",f"log_standard_4_22_to_5_08{suffix}.csv"):
         with open(os.path.join(data_dir,fn),encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 d=int(r["date"]); base=(d,r["user_id"],r["video_id"],authors.get(r["video_id"],"UNK"),r["tab"],float(r["duration_ms"]))
                 item={"base":base,"y":int(r["long_view"]!="0"),"aux":{k:float(r[k] or 0) for k in AUX},"play":float(r["play_time_ms"] or 0),"duration":float(r["duration_ms"] or 1)}
                 if 20220408<=d<=20220421: tr.append(item)
-                elif 20220422<=d<=20220428: va.append(item)
+                elif 20220422<=d<=(20220508 if suffix == "_1k" else 20220428): va.append(item)
     user={}; tab={}; author={}
     for x in sorted(tr,key=lambda z:(z["base"][0],z["base"][1])):
         d,u,v,a,t,_=x["base"]; x["hist"]=(user.get(u,0),tab.get((u,t),0),author.get((u,a),0))
@@ -27,11 +32,16 @@ def load_rich(data_dir):
         _,u,_,a,t,_=x["base"]; x["hist"]=(user.get(u,0),tab.get((u,t),0),author.get((u,a),0))
     return tr,va
 
-def encode_rich(train, valid, include_history=True):
+def encode_rich(train, valid, include_history=True, history_cap=20,
+                history_transform="clip"):
     edges=np.quantile(np.asarray([x["base"][5] for x in train]),np.linspace(0,1,11)[1:-1])
     def raw(x):
         b=x["base"]; vals=[b[1],b[2],b[3],b[4],str(int(np.searchsorted(edges,b[5])))]
-        if include_history: vals += [str(min(x["hist"][i],20)) for i in range(3)]
+        if include_history:
+            if history_transform == "log1p":
+                vals += [str(int(np.log1p(x["hist"][i]))) for i in range(3)]
+            else:
+                vals += [str(min(x["hist"][i], history_cap)) for i in range(3)]
         return vals
     voc=[{} for _ in raw(train[0])]
     for x in train:

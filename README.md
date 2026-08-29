@@ -1,147 +1,99 @@
 # KuaiRand TikTok Hackathon Agent
 
-這個專案是 KuaiRand-Pure 的 ranking prototype，目標是預測 `long_view`，並以使用者內曝光排序評估模型。它提供官方 FM baseline、validation-only 實驗 runner，以及四個可插拔的 headroom 方向。
+這個專案是 KuaiRand-Pure 的 ranking prototype，預測 `long_view`，並用官方 evaluator 計算 GAUC、nDCG@5 與 Primary。
 
-## 任務與規則
+## 比賽限制
 
-- Dataset：`KuaiRand-Pure`
-- Target：`long_view`
-- Metrics：`GAUC`、`nDCG@5`
-- Primary：`mean(GAUC, nDCG@5)`
-- 開發資料：train / validation only
-- test / hidden test：禁止用於模型選擇、調參或 Gemini agent loop
-- 官方 `evaluate.py` 不可修改
-- 最終 submission 格式：`row_id,user_id,video_id,score`
+- 開發與 AutoML 只使用 `train` / `valid`。
+- `test` / hidden-test 不得用於模型選擇、調參或 agent loop。
+- 不修改官方 `data.py`、`evaluate.py` 或 submission contract。
+- Agent 只能執行 allowlist 中的 reviewed experiment。
+- Planner 不能產生或執行任意 shell command 或 Python 程式。
+- 只有 validation primary 改善時才保存 family-best checkpoint；confirmation gate 用來降低 overfitting。
+- API key、原始資料、實驗 runs 與 submission CSV 不提交到 GitHub；唯一例外是下方列出的 frozen Pure checkpoint，使用 Git LFS 版本化。
 
-規則設定位於 `agent/rules.json` 與 `agent/headroom_registry.json`。舊的 `agent/run_agent.py` 已停用，不能作為開發入口。
+## 主要目錄
 
-## 目錄
+- `agent/autonomous_agent.py`：受控 AutoML loop。
+- `agent/config_generator.py`：bounded、deterministic 參數組合器。
+- `agent/configs/search_space.json`：固定候選與合法參數 axes。
+- `agent/experiment_specs.json`：experiment allowlist。
+- `agent/validation_experiment_runner.py`：validation-only runner 與 audit。
+- `agent/checkpoint_manager.py`：各 family 最佳權重管理。
+- `agent/modules/`：BPR、Listwise、History、Multi-task、CWM 元件。
+- `kuairand-starter-kit/`：官方 data、evaluate 與 submit checker，只讀使用。
+- `submission_ready/`：frozen manifest、prediction adapter、generator 與 local checker。
+- `runs/`：本地實驗紀錄，不追蹤。
+- `outputs/pure/`：frozen Pure 最佳 checkpoint，使用 Git LFS 追蹤。
 
-```text
-agent/
-  validation_only.py              # 只載入 train/validation
-  validation_experiment_runner.py # allowlist + runner + leaderboard
-  formal_trainer.py               # 共用 headroom trainer
-  rich_data.py                    # auxiliary labels + train-only history
-  experiment_specs.json           # 可執行實驗白名單
-  headroom_registry.json          # 安全規則
-  experiments/bpr_fm.py           # 正式 BPR FM
-  modules/                        # loss、history、multi-task、CWM 元件
-
-kuairand-starter-kit/
-  baseline.py                     # 官方 baseline（只讀，不修改）
-  data.py                         # 官方 encoder
-  evaluate.py                     # 官方 evaluator（只讀，不修改）
-  submit.py                       # submission checker
-
-runs/                             # 實驗 JSON、log、leaderboard
-outputs/                          # checkpoint 與 submission artifacts
-```
-
-## 環境與基本執行
-
-不要上傳或複製本機 conda environment。請用 `environment.yml` 在新電腦重建：
+## 建立環境
 
 ```powershell
 conda env create -f environment.yml
 conda activate tiktok
+cd <repository-root>
 ```
 
-接著將官方 KuaiRand-Pure Starter Kit 資料放到：
+將主辦方提供的 KuaiRand-Pure 資料放在 `kuairand-starter-kit\KuaiRand-Pure\data\`。原始資料不放入 GitHub。
 
-```text
-kuairand-starter-kit\KuaiRand-Pure\data\
-```
-
-原始資料不放入 GitHub；請依主辦方提供的下載方式取得。
-
-```powershell
-conda activate tiktok
-cd D:\tiktok
-```
-
-Validation-only baseline：
+## 單一 validation 實驗
 
 ```powershell
 python -u agent\validation_experiment_runner.py baseline_fm
-```
-
-BPR：
-
-```powershell
 python -u agent\validation_experiment_runner.py bpr_fm
-```
-
-Other registered modes：
-
-```powershell
 python -u agent\validation_experiment_runner.py listwise_fm
 python -u agent\validation_experiment_runner.py history_fm
 python -u agent\validation_experiment_runner.py multitask_fm
 python -u agent\validation_experiment_runner.py cwm_fm
 ```
 
-每個 runner 都會將 stdout/stderr 保存到 `runs/experiment_###_<name>.log`，並寫入對應 JSON。`runs/validation_leaderboard.json` 只比較 validation primary。
+結果會寫入 `runs\pure\`，包含 JSON、log、leaderboard、planner decision、checkpoint metadata 與 code-diff audit。
 
-## 系統 workflow
+## 受控 AutoML
 
-```text
-Gemini planner
-    │ 只提出 allowlisted experiment
-    ▼
-Skill Maintainer / Governor
-    │ 檢查 target、split、path、module
-    ▼
-validation_experiment_runner.py
-    │ 建立 subprocess，禁止 test，記錄錯誤
-    ▼
-formal_trainer.py 或 reviewed experiment entrypoint
-    │ train-only data / validation-only evaluation
-    ▼
-FM + headroom module
-    │ gradient / feature transform / auxiliary objective
-    ▼
-GAUC、nDCG@5、primary
-    │
-    ▼
-leaderboard + checkpoint + experiment log
+```powershell
+python -u agent\autonomous_agent.py --max-iterations 100 --use-pretrained
 ```
 
-正式模型選擇只依 validation primary。若新模型沒有超過 baseline 加上 `epsilon=0.002`，就保留實驗結果但不 promote，baseline 仍是候選模型。
+Planner 會根據 validation 結果選擇下一個 family 與 config。`config_generator.py` 只從 `search_space.json` 登記的有限 axes 產生 deterministic、bounded 組合，並排除已嘗試 config。各 family 的最佳權重位於 `outputs\pure\{experiment}_best.npz`，metadata 位於 `runs\pure\best_models.json`。Pure 的 frozen 最佳 checkpoint 已使用 Git LFS 納入 repository；`runs/` metadata 仍保留在本地，避免上傳大量實驗紀錄。
 
-## Headroom modules
+若所有受控候選耗盡，agent 會安全停止，避免重複實驗造成 validation overfitting。使用 Gemini 時，API key 只放環境變數：
 
-1. **BPR**：同一訓練 batch 中建立 positive/negative pairs，使用 pairwise gradient。
-2. **Listwise**：按 user exposure group 建立 softmax objective。
-3. **History**：以時間順序建立 prior user、user-tab、user-author counts；validation 只能使用 train 結束時的歷史。
-4. **Multi-task**：以 `long_view` 為主任務，並使用 click、like、follow、comment、forward 作 auxiliary signals。
-5. **CWM**：將 `play_time_ms / duration_ms` normalize 至 0 到 1，對 censored observations 使用單側懲罰。
+```powershell
+$env:PLANNER_BACKEND = "gemini"
+$env:GEMINI_API_KEY = "<your-key>"
+python -u agent\autonomous_agent.py --max-iterations 100 --use-pretrained
+```
 
-## 目前實驗結果
+## 最佳模型 prediction 與 checker
 
-| Experiment | GAUC | nDCG@5 | Primary | Status |
-|---|---:|---:|---:|---|
-| Baseline FM | 0.6650 | 0.5342 | 0.6015 | success |
-| BPR FM | 0.6673 | 0.5359 | 0.6026 | success |
-| Listwise FM | 0.4942 | 0.4634 | 0.4800 | success, needs review |
-| History FM | 0.6660 | 0.5353 | 0.6008 | success |
-| Multi-task FM | 0.6611 | 0.5339 | 0.5987 | success |
-| CWM FM | 0.6637 | 0.5345 | 0.5999 | success |
+`submission_ready\manifest.json` 是 frozen 模型來源。`prediction_adapter.py` 會驗證 manifest 狀態、checkpoint 路徑、權重總和與檔案存在性。
 
-BPR 是目前 validation 最佳，但相對 baseline 只有 `+0.00115`，低於 `+0.002` promote 門檻，因此不能取代 baseline。
+先做 validation preview：
 
-## 合規與安全
+```powershell
+python submission_ready\generate_submission.py --split valid --output submission_ready\validation_preview.csv
+python submission_ready\local_checker.py submission_ready\validation_preview.csv --split valid --score
+```
 
-- Gemini 不可任意修改 repository，只能選擇 `experiment_specs.json` 中的實驗。
-- 不要把 API key 寫入 repository；使用環境變數 `GEMINI_API_KEY`。
-- 不要把 `KuaiRand-Pure` 原始資料、API key 或大型 checkpoint 提交到 GitHub。
-- 最終 submission/test 流程只能在 validation 實驗與模型選擇完成後，由人工確認執行。
-- `runs/` 中可能包含歷史失敗實驗；這些是 debugging evidence，不應當作模型成績。
+使用官方 checker 交叉驗證：
 
-## 已知限制與下一步
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+python kuairand-starter-kit\submit.py --check --data_dir kuairand-starter-kit\KuaiRand-Pure\data --split valid submission_ready\validation_preview.csv
+python kuairand-starter-kit\submit.py --score --data_dir kuairand-starter-kit\KuaiRand-Pure\data --split valid submission_ready\validation_preview.csv
+```
 
-- Listwise 結果異常低，需檢查 gradient scaling、group loss 與 early stopping。
-- Multi-task 目前是 shared FM representation 的加權 auxiliary gradient，不是完全獨立的多 head neural architecture。
-- CWM 的 censor label 仍是近似定義，需要依資料語意確認。
-- 最終最佳 checkpoint 尚未完成公開 test 上的人工 submission 流程。
-- Gemini autonomous planner 尚未接入 runner；接入前必須維持 registry fail-closed。
+正式 test submission 只能在 validation 與模型選擇完成後，由人工確認；test 結果不可回饋 AutoML。本 repository preparation 不執行 submit。
+
+## GitHub push 前檢查
+
+```powershell
+python -m py_compile agent\*.py agent\modules\*.py
+python -m json.tool agent\configs\search_space.json > $null
+git diff --check
+git status --short
+git diff --cached --name-only
+```
+
+確認 staged files 不包含 `runs/`、非 frozen 的 `outputs/`、`*.csv`、原始資料、`.tar.gz`、`.env`、API key、token、private key 或機器專屬絕對路徑。唯一允許的 binary 是 `outputs/pure/` 下由 `.gitattributes` 交給 Git LFS 管理的 frozen `.npz`。最後的 `git add`、commit 與 push 由使用者人工執行。

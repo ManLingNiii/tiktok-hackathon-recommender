@@ -15,12 +15,18 @@
     "module": "listwise_loss", "description": "User-exposure listwise softmax gradient, validation-only",
     "command": ["agent/formal_trainer.py", "--mode", "listwise"], "allowed": true
   },
+  "listwise_ensemble": {
+    "module": "listwise_ensemble",
+    "description": "Imported E-project validation-selected listwise bundle, validation-only",
+    "command": ["agent/formal_trainer.py", "--mode", "listwise_ensemble"],
+    "allowed": true
+  },
   "history_fm": {
     "module": "history_features", "description": "Train-only prior user history feature domains, validation-only",
     "command": ["agent/formal_trainer.py", "--mode", "history"], "allowed": true
   },
   "multitask_fm": {
-    "module": "multitask", "description": "Shared FM with real auxiliary feedback heads, validation-only",
+    "module": "multitask", "description": "Shared FM with long_view primary and click auxiliary objective, validation-only",
     "command": ["agent/formal_trainer.py", "--mode", "multitask"], "allowed": true
   },
   "cwm_fm": {

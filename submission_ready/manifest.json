@@ -1,0 +1,31 @@
+{
+  "status": "prepared_not_submitted",
+  "dataset": "KuaiRand-Pure",
+  "target": "long_view",
+  "selection_metric": "mean(GAUC, nDCG@5)",
+  "validation_only": true,
+  "test_used": false,
+  "model": "listwise_ensemble",
+  "validation_metrics": {
+    "GAUC": 0.6703423857688904,
+    "nDCG@5": 0.5378568172454834,
+    "primary": 0.6040996313095093
+  },
+  "confirmation_metrics": {
+    "GAUC": 0.662678599357605,
+    "nDCG@5": 0.5329881906509399,
+    "primary": 0.5978333950042725
+  },
+  "ensemble_members": [
+    {"path": "outputs/pure/listwise_bundle_validation_member.npz", "weight": 0.03830854561368621},
+    {"path": "outputs/pure/listwise_bundle_reference_member.npz", "weight": 0.13426802012707598},
+    {"path": "outputs/pure/listwise_bundle_pointwise_member.npz", "weight": 0.1221815089860066},
+    {"path": "outputs/pure/listwise_bundle_bpr_member.npz", "weight": 0.7052419252732313}
+  ],
+  "submission_format": ["row_id", "user_id", "video_id", "score"],
+  "generator": "submission_ready/generate_submission.py",
+  "local_checker": "submission_ready/local_checker.py",
+  "validation_preview": "submission_ready/validation_preview.csv",
+  "submission_csv": null,
+  "final_test_check": "deferred_until_manual_confirmation"
+}

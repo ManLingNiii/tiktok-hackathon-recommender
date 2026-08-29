@@ -57,6 +57,7 @@ class HistoryFeaturesModule:
 class MultiTaskModule:
     name: str = "multitask"
     auxiliary_weights: dict = None
+    primary_weight: float = 0.95
 
     def validate(self, ctx): require_safe_context(ctx)
     def __post_init__(self):
@@ -65,6 +66,14 @@ class MultiTaskModule:
     def weighted_loss(self, main_loss, auxiliary_losses):
         return float(main_loss + sum(self.auxiliary_weights.get(k, 0.0) * v
                                      for k, v in auxiliary_losses.items()))
+
+    def logit_gradient(self, primary_residual, auxiliary_residuals):
+        """Combine task residuals while keeping long_view as the scored head."""
+        grad = self.primary_weight * np.asarray(primary_residual, dtype=np.float32)
+        total = sum(self.auxiliary_weights.values()) or 1.0
+        for name, residual in auxiliary_residuals.items():
+            grad += (1.0 - self.primary_weight) * self.auxiliary_weights.get(name, 0.0) / total * np.asarray(residual, dtype=np.float32)
+        return grad
 
 
 @dataclass

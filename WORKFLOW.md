@@ -4,7 +4,7 @@
 
 ```powershell
 conda activate tiktok
-cd D:\tiktok
+cd <repository-root>
 ```
 
 確認資料位於 `kuairand-starter-kit\KuaiRand-Pure\data`，並先執行 baseline。
@@ -68,7 +68,21 @@ Gemini 不負責：
 - 任意改寫整個 repository
 - 決定是否使用公開 test 成績
 
-## 7. Final submission
+## 7. Experiment selection ranking
+
+`agent/experiment_selector.py` 使用 UCB1 對 `agent/configs/search_space.json`
+中的候選實驗排序。它只讀取 validation leaderboard，未測試候選會保留探索優先權，
+已測試候選則依 validation primary 與探索 bonus 排序。
+
+```powershell
+python -u agent\experiment_selector.py --top 10
+```
+
+這個 selector 只決定「下一個實驗候選順序」，不改變 GAUC/nDCG@5，也不取代
+`validation_experiment_runner.py` 的安全檢查。最終 promote 仍必須通過 baseline、
+epsilon 與 confirmation guard。
+
+## 8. Final submission
 
 只有在 validation 實驗與人工 review 完成後，才可以執行 Starter Kit 的 submission 流程：
 

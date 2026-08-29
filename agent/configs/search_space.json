@@ -1,0 +1,104 @@
+{
+  "safe_default": {"k": 16, "lr": 0.001, "l2": 1e-6, "batch_size": 8192, "epochs": 12, "patience": 3},
+  "candidates": [
+    {"name":"conservative", "k":8, "lr":0.0005, "l2":1e-5, "batch_size":8192, "epochs":16, "patience":4},
+    {"name":"wide", "k":32, "lr":0.0005, "l2":1e-6, "epochs":12, "patience":3},
+    {"name":"regularized", "k":16, "lr":0.001, "l2":0.00001, "epochs":12, "patience":3}
+    ,{"name":"slow_wide", "k":32, "lr":0.00025, "l2":0.00001, "epochs":20, "patience":5},
+    {"name":"fast_small", "k":8, "lr":0.0015, "l2":0.00001, "epochs":10, "patience":3},
+    {"name":"strong_reg", "k":16, "lr":0.0005, "l2":0.0001, "epochs":16, "patience":4},
+    {"name":"bpr_balanced_rank", "families":["bpr_fm"], "k":16, "lr":0.00075, "l2":3e-6, "epochs":16, "patience":4},
+    {"name":"bpr_high_rank", "families":["bpr_fm"], "k":32, "lr":0.00075, "l2":1e-6, "epochs":16, "patience":4},
+    {"name":"listwise_temp_2", "families":["listwise_fm"], "k":16, "lr":0.0005, "l2":1e-6, "epochs":12, "patience":3, "listwise_temperature":2.0, "pretrained":"outputs/pure/listwise_external_warmstart.npz"},
+    {"name":"listwise_temp_half", "families":["listwise_fm"], "k":16, "lr":0.0005, "l2":1e-6, "epochs":12, "patience":3, "listwise_temperature":0.5, "pretrained":"outputs/pure/listwise_external_warmstart.npz"},
+    {"name":"listwise_e_bundle_06041", "families":["listwise_ensemble"], "source":"submission_ready/manifest.json"},
+    {"name":"history_log1p", "families":["history_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":14, "patience":4, "history_transform":"log1p"},
+    {"name":"history_wide_cap", "families":["history_fm"], "k":32, "lr":0.00075, "l2":1e-6, "epochs":16, "patience":4, "history_cap":50},
+    {"name":"multitask_low_aux", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":14, "patience":4, "pointwise_weight":0.82, "pairwise_weight":0.15, "auxiliary_weight":0.03},
+    {"name":"multitask_rank", "families":["multitask_fm"], "k":16, "lr":0.00075, "l2":1e-6, "epochs":16, "patience":4, "pointwise_weight":0.60, "pairwise_weight":0.35, "auxiliary_weight":0.05},
+    {"name":"multitask_primary_heavy", "families":["multitask_fm"], "k":16, "lr":0.00125, "l2":3e-6, "epochs":16, "patience":4, "pointwise_weight":0.90, "pairwise_weight":0.08, "auxiliary_weight":0.02},
+    {"name":"multitask_balanced", "families":["multitask_fm"], "k":32, "lr":0.00075, "l2":3e-6, "epochs":16, "patience":4, "pointwise_weight":0.75, "pairwise_weight":0.20, "auxiliary_weight":0.05},
+    {"name":"multitask_low_aux_seed1", "families":["multitask_fm"], "seed":1, "k":16, "lr":0.001, "l2":1e-6, "epochs":14, "patience":4, "pointwise_weight":0.82, "pairwise_weight":0.15, "auxiliary_weight":0.03},
+    {"name":"multitask_low_aux_seed2", "families":["multitask_fm"], "seed":2, "k":16, "lr":0.001, "l2":1e-6, "epochs":14, "patience":4, "pointwise_weight":0.82, "pairwise_weight":0.15, "auxiliary_weight":0.03},
+    {"name":"multitask_bpr_heavy", "families":["multitask_fm"], "k":16, "lr":0.00075, "l2":1e-6, "epochs":18, "patience":5, "pointwise_weight":0.20, "pairwise_weight":0.75, "auxiliary_weight":0.05},
+    {"name":"multitask_primary_max", "families":["multitask_fm"], "k":16, "lr":0.00075, "l2":3e-6, "epochs":20, "patience":5, "pointwise_weight":0.95, "pairwise_weight":0.04, "auxiliary_weight":0.01},
+    {"name":"multitask_global_bpr", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":16, "patience":4, "pair_scope":"global", "pointwise_weight":0.05, "pairwise_weight":0.90, "auxiliary_weight":0.05},
+    {"name":"multitask_bpr_exact", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":16, "patience":4, "pair_scope":"bpr_exact", "pointwise_weight":0.05, "pairwise_weight":0.90, "auxiliary_weight":0.05},
+    {"name":"multitask_dual_head", "families":["multitask_fm"], "architecture":"dual_head", "k":16, "lr":0.001, "l2":1e-5, "epochs":18, "patience":5, "pointwise_weight":0.85, "pairwise_weight":0.10, "auxiliary_weight":0.05},
+    {"name":"multitask_primary_first", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":18, "patience":5, "schedule":"primary_first", "warmup_epochs":8, "pointwise_weight":0.70, "pairwise_weight":0.25, "auxiliary_weight":0.05},
+    {"name":"multitask_projected_aux", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":16, "patience":4, "gradient_policy":"project_aux", "pointwise_weight":0.70, "pairwise_weight":0.25, "auxiliary_weight":0.05},
+    {"name":"multitask_dual_isolated", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":18, "patience":5, "architecture":"dual_head", "pointwise_weight":0.70, "pairwise_weight":0.25, "auxiliary_weight":0.05},
+    {"name":"multitask_bpr_clone", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":16, "patience":4, "architecture":"dual_head", "pair_scope":"bpr_clone", "pointwise_weight":0.05, "pairwise_weight":0.95, "auxiliary_weight":0.0},
+    {"name":"multitask_primary_bpr_isolated", "families":["multitask_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":16, "patience":4, "architecture":"dual_head", "primary_objective":"bpr", "auxiliary_weight":0.0},
+    {"name":"cwm_soft", "families":["cwm_fm"], "k":16, "lr":0.001, "l2":1e-6, "epochs":14, "patience":4, "cwm_pointwise_weight":0.90, "cwm_weight":0.10},
+    {"name":"cwm_strong", "families":["cwm_fm"], "k":16, "lr":0.00075, "l2":1e-6, "epochs":16, "patience":4, "cwm_pointwise_weight":0.65, "cwm_weight":0.35, "cwm_margin":0.02}
+  ],
+  "generated": {
+    "enabled": true,
+    "families": {
+      "bpr_fm": {
+        "max_candidates": 24,
+        "axes": {
+          "k": [8, 16, 32, 64],
+          "lr": [0.00025, 0.0005, 0.00075, 0.001],
+          "l2": [1e-6, 1e-5, 1e-4],
+          "epochs": [12, 16],
+          "patience": [3, 4]
+        }
+      },
+      "listwise_fm": {
+        "max_candidates": 24,
+        "axes": {
+          "k": [8, 16, 32, 64],
+          "lr": [0.00025, 0.0005, 0.001],
+          "l2": [1e-6, 1e-5, 1e-4],
+          "listwise_temperature": [0.5, 1.0, 2.0, 3.0],
+          "epochs": [12, 16],
+          "patience": [3, 4]
+        }
+      },
+      "history_fm": {
+        "max_candidates": 16,
+        "axes": {
+          "k": [8, 16, 32],
+          "lr": [0.00025, 0.0005, 0.001],
+          "l2": [1e-6, 1e-5, 1e-4],
+          "history_cap": [10, 20, 50],
+          "history_transform": ["clip", "log1p"],
+          "epochs": [12, 16],
+          "patience": [3, 4]
+        }
+      },
+      "multitask_fm": {
+        "max_candidates": 48,
+        "axes": {
+          "k": [8, 16, 32],
+          "lr": [0.00025, 0.0005, 0.001],
+          "l2": [1e-6, 1e-5, 1e-4],
+          "architecture": ["shared", "dual_head"],
+          "primary_objective": ["pointwise", "bpr"],
+          "pointwise_weight": [0.7, 0.85, 0.95],
+          "pairwise_weight": [0.0, 0.1, 0.25],
+          "auxiliary_weight": [0.0, 0.02, 0.05],
+          "gradient_policy": ["none", "project_aux"],
+          "schedule": ["none", "primary_first"],
+          "epochs": [12, 16],
+          "patience": [3, 4]
+        }
+      },
+      "cwm_fm": {
+        "max_candidates": 24,
+        "axes": {
+          "k": [8, 16, 32],
+          "lr": [0.00025, 0.0005, 0.001],
+          "l2": [1e-6, 1e-5, 1e-4],
+          "cwm_pointwise_weight": [0.65, 0.8, 0.9],
+          "cwm_weight": [0.1, 0.2, 0.35],
+          "cwm_margin": [0.0, 0.02, 0.05],
+          "epochs": [12, 16],
+          "patience": [3, 4]
+        }
+      }
+    }
+  }
+}
