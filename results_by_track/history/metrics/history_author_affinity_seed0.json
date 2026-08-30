@@ -1,0 +1,25 @@
+{
+  "track": "history",
+  "method": "end_to_end_author_affinity_fm",
+  "selected_top1": "author_affinity_rate",
+  "history_fields_used": [
+    "author_affinity_rate"
+  ],
+  "hyperparameters": {
+    "k": 16,
+    "lr": 0.001,
+    "l2": 1e-06,
+    "batch_size": 8192,
+    "epochs": 15,
+    "seed": 0
+  },
+  "checkpoint_path": "results_by_track/history/checkpoints/history_author_affinity_seed0.npz",
+  "best_epoch": 7,
+  "valid_GAUC": 0.6684041619300842,
+  "valid_nDCG@5": 0.5366986989974976,
+  "valid_primary": 0.6025514602661133,
+  "baseline_valid_primary": 0.6015,
+  "gain_vs_baseline": 0.001051485538482666,
+  "selection": "selected previously by end-to-end validation comparison; final training uses only author_affinity_rate with learned weight",
+  "test_used": false
+}

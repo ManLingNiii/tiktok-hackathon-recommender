@@ -1,0 +1,29 @@
+{
+  "track": "history",
+  "method": "end_to_end_history_fm",
+  "history_fields": [
+    "same_author_as_candidate",
+    "author_interaction_count",
+    "author_interaction_ratio",
+    "author_affinity_rate",
+    "recent_engagement_rate",
+    "dur_bucket_affinity"
+  ],
+  "hyperparameters": {
+    "k": 16,
+    "lr": 0.001,
+    "l2": 1e-06,
+    "batch_size": 8192,
+    "epochs": 15,
+    "seed": 0
+  },
+  "checkpoint_path": "results_by_track/history/checkpoints/history_end_to_end_seed0.npz",
+  "best_epoch": 3,
+  "valid_GAUC": 0.6668813824653625,
+  "valid_nDCG@5": 0.5353596806526184,
+  "valid_primary": 0.6011205315589905,
+  "baseline_valid_primary": 0.6015,
+  "gain_vs_baseline": -0.0003794431686401367,
+  "sampling": "all train rows, reshuffled each epoch, pointwise log-loss; no negative sampling",
+  "history_source": "chronological train-only interactions"
+}

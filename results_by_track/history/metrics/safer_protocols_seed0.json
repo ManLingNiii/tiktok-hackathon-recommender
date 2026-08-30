@@ -1,0 +1,90 @@
+[
+  {
+    "protocol": "internal_holdout",
+    "selected_top1": "same_author_as_candidate",
+    "selection": [
+      {
+        "feature": "same_author_as_candidate",
+        "primary": 0.6277666091918945,
+        "gain": 0.0002512931823730469
+      },
+      {
+        "feature": "author_interaction_count",
+        "primary": 0.6275697946548462,
+        "gain": 5.447864532470703e-05
+      },
+      {
+        "feature": "author_interaction_ratio",
+        "primary": 0.6275345087051392,
+        "gain": 1.919269561767578e-05
+      },
+      {
+        "feature": "author_affinity_rate",
+        "primary": 0.6274852752685547,
+        "gain": -3.0040740966796875e-05
+      },
+      {
+        "feature": "recent_engagement_rate",
+        "primary": 0.6275153160095215,
+        "gain": 0.0
+      },
+      {
+        "feature": "dur_bucket_affinity",
+        "primary": 0.627369225025177,
+        "gain": -0.00014609098434448242
+      }
+    ],
+    "valid_GAUC": 0.6658770442008972,
+    "valid_nDCG@5": 0.5353535413742065,
+    "valid_primary": 0.6006152629852295,
+    "baseline_valid_primary": 0.6015,
+    "gain_vs_baseline": -0.000884711742401123,
+    "best_epoch": 8,
+    "seed": 0,
+    "test_used": false
+  },
+  {
+    "protocol": "train_cv",
+    "selected_top1": "dur_bucket_affinity",
+    "selection": [
+      {
+        "feature": "same_author_as_candidate",
+        "mean_gain": -0.000758051872253418,
+        "std_gain": 9.41697553597154e-05
+      },
+      {
+        "feature": "author_interaction_count",
+        "mean_gain": -0.0006047685941060384,
+        "std_gain": 0.00011471024308480229
+      },
+      {
+        "feature": "author_interaction_ratio",
+        "mean_gain": -2.9007593790690105e-05,
+        "std_gain": 1.9419551437168055e-05
+      },
+      {
+        "feature": "author_affinity_rate",
+        "mean_gain": 2.4378299713134766e-05,
+        "std_gain": 3.7717010410605515e-05
+      },
+      {
+        "feature": "recent_engagement_rate",
+        "mean_gain": 0.0,
+        "std_gain": 0.0
+      },
+      {
+        "feature": "dur_bucket_affinity",
+        "mean_gain": 7.03732172648112e-05,
+        "std_gain": 2.304968120982307e-05
+      }
+    ],
+    "valid_GAUC": 0.6666932702064514,
+    "valid_nDCG@5": 0.536028265953064,
+    "valid_primary": 0.6013607978820801,
+    "baseline_valid_primary": 0.6015,
+    "gain_vs_baseline": -0.0001391768455505371,
+    "best_epoch": 5,
+    "seed": 0,
+    "test_used": false
+  }
+]

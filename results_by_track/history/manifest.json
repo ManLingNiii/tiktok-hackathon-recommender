@@ -1,0 +1,79 @@
+{
+  "model": {
+    "track": "history",
+    "method": "end_to_end_learned_top1_history_fm",
+    "selected_top1": "author_affinity_rate",
+    "candidate_results": [
+      {
+        "feature": "author_affinity_rate",
+        "valid_GAUC": 0.6684041619300842,
+        "valid_nDCG@5": 0.5366986989974976,
+        "valid_primary": 0.6025514602661133,
+        "best_epoch": 7,
+        "learned_linear_weight": -0.1997162252664566
+      },
+      {
+        "feature": "recent_engagement_rate",
+        "valid_GAUC": 0.6674611568450928,
+        "valid_nDCG@5": 0.5365400910377502,
+        "valid_primary": 0.6020005941390991,
+        "best_epoch": 5,
+        "learned_linear_weight": -0.2586767077445984
+      },
+      {
+        "feature": "dur_bucket_affinity",
+        "valid_GAUC": 0.6666932702064514,
+        "valid_nDCG@5": 0.536028265953064,
+        "valid_primary": 0.6013607978820801,
+        "best_epoch": 5,
+        "learned_linear_weight": -0.19548280537128448
+      },
+      {
+        "feature": "author_interaction_ratio",
+        "valid_GAUC": 0.6669663190841675,
+        "valid_nDCG@5": 0.53570955991745,
+        "valid_primary": 0.6013379096984863,
+        "best_epoch": 7,
+        "learned_linear_weight": -0.13670718669891357
+      },
+      {
+        "feature": "author_interaction_count",
+        "valid_GAUC": 0.6660580039024353,
+        "valid_nDCG@5": 0.5353320240974426,
+        "valid_primary": 0.600695013999939,
+        "best_epoch": 7,
+        "learned_linear_weight": -0.16599276661872864
+      },
+      {
+        "feature": "same_author_as_candidate",
+        "valid_GAUC": 0.6658770442008972,
+        "valid_nDCG@5": 0.5353535413742065,
+        "valid_primary": 0.6006152629852295,
+        "best_epoch": 8,
+        "learned_linear_weight": -0.16706977784633636
+      }
+    ],
+    "history_fields_used": [
+      "author_affinity_rate"
+    ],
+    "hyperparameters": {
+      "k": 16,
+      "lr": 0.001,
+      "l2": 1e-06,
+      "batch_size": 8192,
+      "epochs": 15,
+      "seed": 0
+    },
+    "checkpoint_path": "results_by_track/history/checkpoints/history_top1_seed0.npz",
+    "best_epoch": 7,
+    "valid_GAUC": 0.6684041619300842,
+    "valid_nDCG@5": 0.5366986989974976,
+    "valid_primary": 0.6025514602661133,
+    "baseline_valid_primary": 0.6015,
+    "gain_vs_baseline": 0.0010514602661132466,
+    "selection": "six candidates independently trained end-to-end; top-1 selected by validation primary; selected feature weight learned by gradient descent",
+    "test_used": false
+  },
+  "selected_feature": "author_affinity_rate",
+  "feature_selection": "six independent end-to-end candidate models"
+}
