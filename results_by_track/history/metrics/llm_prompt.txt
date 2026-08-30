@@ -1,0 +1,9 @@
+You are proposing history features for a recommender model.
+
+Schema and constraints:
+{"available_source_fields": ["author_id", "comment_stay_time", "date", "duration_ms", "hourmin", "is_click", "is_comment", "is_follow", "is_forward", "is_hate", "is_like", "is_profile_enter", "is_rand", "long_view", "play_time_ms", "profile_stay_time", "tab", "time_ms", "user_id", "video_id"], "baseline_fields": ["author_id", "dur_bucket", "tab", "user_id", "video_id"], "forbidden": ["external_data", "future_interaction", "hidden_test", "pretrained_embedding", "test_label"], "history_must_use": "chronological interactions from the official training split only", "label": "long_view", "metrics": ["GAUC", "nDCG@5", "primary"], "requirements": ["feature must vary by candidate or interact with candidate fields", "no current-row label in its own history", "no validation/test labels during feature construction"], "task": "within-user ranking of standard logged impressions"}
+
+Return JSON only with this shape:
+{"features":[{"source_columns":[...],"history_scope":"...","time_order":"...","window":{"type":"...","value":...},"aggregation":"...","formula":"...","uses_current_row":false,"rationale":"..."}]}
+
+Do not return a feature name or id. First specify what to compute. Every source column must be in available_source_fields, history must use only prior training interactions, and the feature must affect candidate ranking.

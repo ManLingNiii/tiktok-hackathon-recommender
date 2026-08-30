@@ -81,6 +81,19 @@ training and validation selection then runs unchanged.
 
 ## Validation results
 
+The current coverage-filtered LLM workflow received six proposals, rejected
+four below 5% validation coverage, and selected
+`smoothed_positive_rate_long_view_tab` with validation primary `0.60164`.
+Full proposal specifications, rejected proposals, coverage, and metrics are
+recorded in `results_by_track/history/metrics/workflow_seed0.json`.
+
+The current workflow applies a predefined minimum validation coverage of 5%
+before training. Proposals below that threshold are recorded as rejected.
+The LLM may consider coverage estimates from training-only profiling when
+proposing features, but the estimate cannot replace the pipeline's actual
+coverage calculation. The 5% threshold is fixed before official validation and
+is not tuned from validation results.
+
 Shared FM baseline, seed `0`:
 
 - GAUC: `0.66710`
@@ -99,7 +112,11 @@ hyperparameters and evaluated on the official validation split:
 | `author_interaction_count` | 0.66606 | 0.53533 | 0.60070 | -0.1660 |
 | `same_author_as_candidate` | 0.66588 | 0.53535 | 0.60062 | -0.1671 |
 
-Final selected model:
+The older pre-LLM comparison results below are retained for historical
+comparison. The official LLM-workflow model is the coverage-filtered result
+above.
+
+Final selected model for the pre-LLM comparison:
 
 - Selected feature: `author_affinity_rate`
 - Valid primary: `0.60255`

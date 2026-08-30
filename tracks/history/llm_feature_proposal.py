@@ -10,6 +10,8 @@ BASELINE_FIELDS={'user_id','video_id','author_id','tab','dur_bucket'}
 RAW_FIELDS={'user_id','video_id','author_id','tab','date','hourmin','time_ms','duration_ms','long_view','is_click','is_like','is_follow','is_comment','is_forward','is_hate','play_time_ms','profile_stay_time','comment_stay_time','is_profile_enter','is_rand'}
 HISTORY_ALLOWED=RAW_FIELDS-BASELINE_FIELDS
 FORBIDDEN={'test_label','hidden_test','future_interaction','external_data','pretrained_embedding'}
+SUPPORTED_AGGREGATIONS={'smoothed_positive_rate','interaction_count','duration_bucket_affinity','recency_weighted_positive_rate'}
+SUPPORTED_WINDOWS={'all_prior','recent'}
 
 SCHEMA={
     'task':'within-user ranking of standard logged impressions',
@@ -40,6 +42,8 @@ def validate_spec(spec):
     if spec['uses_current_row'] is not False: raise ValueError('uses_current_row must be false')
     if not spec['history_scope'] or not spec['time_order']: raise ValueError('history scope/order required')
     if 'train' not in str(spec['history_scope']).lower(): raise ValueError('history scope must mention train')
+    if spec['aggregation'] not in SUPPORTED_AGGREGATIONS: raise ValueError('unsupported aggregation: '+str(spec['aggregation']))
+    if not isinstance(spec['window'],dict) or spec['window'].get('type') not in SUPPORTED_WINDOWS: raise ValueError('unsupported window type')
     # A user-only statistic is constant across all candidates for that user,
     # so it cannot change within-user ranking.  Require the computation to
     # reference at least one candidate-side field.

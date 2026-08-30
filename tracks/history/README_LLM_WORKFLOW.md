@@ -28,6 +28,13 @@ The LLM proposes candidate features; gradient descent learns the feature's
 model parameters and weighting; validation determines which candidate is
 promoted.
 
+Coverage is handled in two stages. Training-only profiling may provide
+estimated coverage to the LLM, allowing it to prefer candidate keys that are
+likely to be sufficiently populated. The estimate is advisory only. The
+pipeline independently calculates actual validation coverage and applies the
+fixed 5% eligibility rule. The threshold is declared before the official
+validation comparison and is not changed using validation results.
+
 ## Step 1: LLM feature proposal
 
 `llm_feature_proposal.py` defines the schema and produces the prompt through
@@ -106,6 +113,18 @@ weight, checkpoint information, GAUC, nDCG@5, primary score, and best epoch.
 
 ## Step 3: Top-1 selection
 
+The workflow also records train and validation history coverage for every
+candidate: the fraction of rows with a matching prior user-candidate history.
+This is especially important for user-video affinity. A high validation score
+does not imply that users commonly see the same video repeatedly; low coverage
+means the feature mostly uses its fallback value and its gain may be driven by
+only a subset of rows.
+
+Before training, the workflow applies the predeclared eligibility rule
+`validation coverage >= 5%`. Proposals below this threshold are recorded as
+rejected and do not compete for top-1. This avoids selecting a sparse feature
+whose apparent gain is driven by a very small subset of validation rows.
+
 Candidates are sorted by validation primary:
 
 ```text
@@ -134,6 +153,8 @@ The workflow writes:
 
 - `results_by_track/history/metrics/workflow_seed0.json` — all candidates and
   the selected top-1;
+- `results_by_track/history/checkpoints/history_top1_seed0.npz` — the selected
+  global top-1 checkpoint;
 - `results_by_track/history/metrics/raw_llm_response.json` — exact proposal
   input;
 - `results_by_track/history/metrics/llm_prompt.txt` — prompt contract;
