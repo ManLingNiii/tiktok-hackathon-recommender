@@ -1,0 +1,68 @@
+{
+  "track": "bpr",
+  "method": "bpr_fm",
+  "dataset": "KuaiRand-Pure",
+  "split_version": "v1",
+  "negative_sampling": "random_same_user",
+  "seed": 0,
+  "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
+  "fixed_hyperparameters": {
+    "k": 16,
+    "lr": 0.001,
+    "l2": 1e-06,
+    "batch_size": 8192,
+    "epochs": 40,
+    "patience": 4
+  },
+  "runs": [
+    {
+      "n_neg": 1,
+      "best_epoch": 5,
+      "pair_count": 382579,
+      "valid_GAUC": 0.6677,
+      "valid_nDCG@5": 0.5366,
+      "valid_primary": 0.6021,
+      "test_GAUC": 0.6617,
+      "test_nDCG@5": 0.5293,
+      "test_primary": 0.5955,
+      "gain_vs_n_neg_1": 0.0,
+      "training_time_sec": null,
+      "checkpoint_path": null,
+      "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
+      "notes": "Training time and checkpoint were not emitted by the current script."
+    },
+    {
+      "n_neg": 3,
+      "best_epoch": 2,
+      "pair_count": 1147737,
+      "valid_GAUC": 0.6684,
+      "valid_nDCG@5": 0.5364,
+      "valid_primary": 0.6024,
+      "test_GAUC": 0.6636,
+      "test_nDCG@5": 0.5303,
+      "test_primary": 0.5969,
+      "gain_vs_n_neg_1": 0.0003,
+      "training_time_sec": null,
+      "checkpoint_path": null,
+      "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
+      "notes": "Validation primary is marginally higher; below the 0.002 candidate-improvement threshold."
+    },
+    {
+      "n_neg": 5,
+      "best_epoch": 2,
+      "pair_count": 1912895,
+      "valid_GAUC": 0.6684,
+      "valid_nDCG@5": 0.5354,
+      "valid_primary": 0.6019,
+      "test_GAUC": 0.6627,
+      "test_nDCG@5": 0.5294,
+      "test_primary": 0.5961,
+      "gain_vs_n_neg_1": -0.0002,
+      "training_time_sec": null,
+      "checkpoint_path": null,
+      "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
+      "notes": "Validation GAUC matches n_neg=3, but nDCG@5 and primary are lower than n_neg=1."
+    }
+  ],
+  "selection_note": "Seed-0 preliminary comparison only; test metrics are reported but were not used for selection."
+}

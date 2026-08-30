@@ -1,0 +1,56 @@
+{
+  "track": "bpr",
+  "dataset": "KuaiRand-Pure",
+  "split_version": "v1",
+  "seed": 0,
+  "fixed_settings": {
+    "model": "fm",
+    "n_neg": 1,
+    "k": 16,
+    "lr": 0.001,
+    "l2": 1e-06,
+    "batch_size": 8192,
+    "epochs": 40,
+    "patience": 4
+  },
+  "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
+  "runs": [
+    {
+      "method": "random same-user",
+      "negative_sampling": "random_same_user",
+      "n_neg": 1,
+      "best_epoch": 5,
+      "pair_count": 382579,
+      "valid_GAUC": 0.6677,
+      "valid_nDCG@5": 0.5366,
+      "valid_primary": 0.6021,
+      "test_GAUC": 0.6617,
+      "test_nDCG@5": 0.5293,
+      "test_primary": 0.5955,
+      "gain_vs_random": 0.0,
+      "training_time_sec": null,
+      "checkpoint_path": null,
+      "notes": "Baseline comparison run; timing/checkpoint are not emitted by the current script."
+    },
+    {
+      "method": "semi-hard same-user",
+      "negative_sampling": "semi_hard_same_user_static",
+      "n_neg": 1,
+      "warmup_epochs": 1,
+      "semi_hard_fraction": 0.3,
+      "best_epoch": 2,
+      "pair_count": 382579,
+      "valid_GAUC": 0.5660,
+      "valid_nDCG@5": 0.4957,
+      "valid_primary": 0.5308,
+      "test_GAUC": 0.5510,
+      "test_nDCG@5": 0.4783,
+      "test_primary": 0.5147,
+      "gain_vs_random": -0.0713,
+      "training_time_sec": null,
+      "checkpoint_path": null,
+      "notes": "Static semi-hard pairs built after one random warm-up epoch; regression in this seed-0 run."
+    }
+  ],
+  "selection_note": "Validation primary was used for model selection; test metrics are reported only. One seed is preliminary evidence, not statistical significance."
+}
