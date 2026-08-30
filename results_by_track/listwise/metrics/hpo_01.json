@@ -1,0 +1,27 @@
+{
+  "track": "listwise",
+  "method": "fm_user_listwise_softmax_finetune",
+  "hyperparameters": {
+    "k": 16,
+    "lr": 1e-05,
+    "l2": 1e-06,
+    "temperature": 0.5,
+    "user_batch_size": 256,
+    "max_epochs": 40,
+    "patience": 4
+  },
+  "seed": 0,
+  "best_epoch": 1,
+  "checkpoint_path": "results_by_track/listwise/checkpoints/hpo_01.npz",
+  "valid_GAUC": 0.6666273474693298,
+  "valid_nDCG@5": 0.5354934930801392,
+  "valid_primary": 0.6010603904724121,
+  "gain": -0.00040912628173828125,
+  "training_time_sec": 9.489521980285645,
+  "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
+  "grouping": "all logged impressions for one user within train split",
+  "train_users_total": 26210,
+  "train_users_discriminative": 24290,
+  "test_metrics_used": false,
+  "initialized_from": "results_by_track/listwise/checkpoints/baseline_seed0.npz"
+}
