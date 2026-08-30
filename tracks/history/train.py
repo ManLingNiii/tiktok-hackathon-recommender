@@ -5,8 +5,9 @@ HERE=os.path.dirname(os.path.abspath(__file__)); ROOT=os.path.dirname(os.path.di
 from data import load,encode
 from evaluate import evaluate
 from baseline import FM,sigmoid
+from feature_proposal import propose_features,SCHEMA
 
-FIELDS=['same_author_as_candidate','author_interaction_count','author_interaction_ratio','author_affinity_rate','recent_engagement_rate','dur_bucket_affinity']
+FIELDS=propose_features()
 def history(train,rows,prefix=False):
  q=np.quantile([x[5] for x in train],np.linspace(0,1,11)[1:-1]); g=sum(x[6] for x in train)/len(train); c={};t={};r={}; out=np.zeros((len(rows),6),np.float32)
  if not prefix:
@@ -44,7 +45,7 @@ def main(a):
  for i,name in enumerate(FIELDS):
   m,v,ep=train_candidate(X,y,Xv,yv,uv,H[:,i:i+1],Hv[:,i:i+1],dim,a);rows.append({'feature':name,'valid_GAUC':float(v['GAUC']),'valid_nDCG@5':float(v['nDCG@5']),'valid_primary':float(v['primary']),'best_epoch':int(ep),'learned_linear_weight':float(m.Wh[0])});models.append(m)
  rows.sort(key=lambda x:x['valid_primary'],reverse=True);selected=rows[0]['feature'];m=models[FIELDS.index(selected)];rel='results_by_track/history/checkpoints/history_top1_seed0.npz';os.makedirs(os.path.join(ROOT,'results_by_track/history/checkpoints'),exist_ok=True);np.savez(os.path.join(ROOT,rel),V=m.V,W=m.W,Vh=m.Vh,Wh=m.Wh,b=m.b,selected_feature=selected,seed=0,best_epoch=rows[0]['best_epoch'])
- r={'track':'history','method':'end_to_end_learned_top1_history_fm','selected_top1':selected,'candidate_results':rows,'history_fields_used':[selected],'hyperparameters':{'k':a.k,'lr':a.lr,'l2':a.l2,'batch_size':a.batch_size,'epochs':a.epochs,'seed':0},'checkpoint_path':rel,'best_epoch':rows[0]['best_epoch'],'valid_GAUC':rows[0]['valid_GAUC'],'valid_nDCG@5':rows[0]['valid_nDCG@5'],'valid_primary':rows[0]['valid_primary'],'baseline_valid_primary':.6015,'gain_vs_baseline':rows[0]['valid_primary']-.6015,'selection':'six candidates independently trained end-to-end; top-1 selected by validation primary; selected feature weight learned by gradient descent','test_used':False}
+ r={'track':'history','method':'end_to_end_learned_top1_history_fm','feature_proposal_schema':SCHEMA,'proposed_candidates':FIELDS,'selected_top1':selected,'candidate_results':rows,'history_fields_used':[selected],'hyperparameters':{'k':a.k,'lr':a.lr,'l2':a.l2,'batch_size':a.batch_size,'epochs':a.epochs,'seed':0},'checkpoint_path':rel,'best_epoch':rows[0]['best_epoch'],'valid_GAUC':rows[0]['valid_GAUC'],'valid_nDCG@5':rows[0]['valid_nDCG@5'],'valid_primary':rows[0]['valid_primary'],'baseline_valid_primary':.6015,'gain_vs_baseline':rows[0]['valid_primary']-.6015,'selection':'schema constraints -> proposed candidates -> each candidate trained end-to-end -> top-1 selected by validation primary; selected feature weight learned by gradient descent','test_used':False}
  os.makedirs(os.path.join(ROOT,'results_by_track/history/metrics'),exist_ok=True)
  with open(os.path.join(ROOT,'results_by_track/history/metrics/history_top1_seed0.json'),'w') as f:json.dump(r,f,indent=2)
  with open(os.path.join(ROOT,'results_by_track/history/manifest.json'),'w') as f:json.dump({'model':r,'selected_feature':selected,'feature_selection':'six independent end-to-end candidate models'},f,indent=2)
