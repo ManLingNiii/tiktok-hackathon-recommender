@@ -4,10 +4,11 @@
   --model random: 随机打分（下界，用来自检评测代码没坏）
 只依赖 numpy。用法见 README.md
 """
-import argparse, collections, time
+import argparse, collections, os, time
 import numpy as np
 from data import load, encode, FIELDS
 from evaluate import evaluate
+from checkpoint_utils import save_numpy_checkpoint
 
 def sigmoid(x): return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
 
@@ -137,7 +138,8 @@ class FM:
 #     ↓
 # 學習排序
 def run_fm(splits, k=16, lr=0.001, epochs=40,
-           bs=8192, patience=4, seed=0, verbose=True):
+           bs=8192, patience=4, seed=0, verbose=True,
+           checkpoint_dir='results_by_track/bpr/checkpoints/'):
 
     enc, dim = encode(splits)
     # 需要user資料
@@ -187,6 +189,7 @@ def run_fm(splits, k=16, lr=0.001, epochs=40,
 
     best = -1
     best_state = None
+    checkpoint_path = None
     bad = 0
 
     for ep in range(1, epochs + 1):
@@ -224,6 +227,11 @@ def run_fm(splits, k=16, lr=0.001, epochs=40,
                 m.W.copy(),
                 np.float32(m.b)
             )
+            checkpoint_path = save_numpy_checkpoint(
+                os.path.join(checkpoint_dir, f'bpr__nneg1__seed{seed}__best.npz'),
+                m, dim=dim, k=k, lr=lr, l2=m.l2, seed=seed,
+                best_epoch=ep, valid_metrics=va, n_neg=1, method='bpr'
+            )
         else:
             bad += 1
             if bad >= patience:
@@ -236,7 +244,8 @@ def run_fm(splits, k=16, lr=0.001, epochs=40,
 
     return {
         'valid': evaluate(uva, yva, m.predict(Xva)),
-        'test': evaluate(ute, yte, m.predict(Xte))
+        'test': evaluate(ute, yte, m.predict(Xte)),
+        'checkpoint_path': checkpoint_path
     }
 
 if __name__ == '__main__':
@@ -248,13 +257,17 @@ if __name__ == '__main__':
     ap.add_argument('--lr', type=float, default=0.001)
     ap.add_argument('--epochs', type=int, default=40)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--checkpoint_dir', default='results_by_track/bpr/checkpoints/')
     a = ap.parse_args()
     print(f"loading {a.data_dir} ...")
     splits = load(a.data_dir)
     print({k_: len(v) for k_, v in splits.items()}, f"fields={FIELDS}")
     res = {'pop': run_pop, 'random': lambda s: run_random(s, a.seed),
-           'fm': lambda s: run_fm(s, k=a.k, lr=a.lr, epochs=a.epochs, seed=a.seed)}[a.model](splits)
+           'fm': lambda s: run_fm(s, k=a.k, lr=a.lr, epochs=a.epochs,
+                                  seed=a.seed, checkpoint_dir=a.checkpoint_dir)}[a.model](splits)
     print(f"\n=== {a.model} (seed={a.seed}) ===")
     for sp in ('valid', 'test'):
         r = res[sp]
         print(f"  {sp:5s}  GAUC {r['GAUC']:.4f} | nDCG@5 {r['nDCG@5']:.4f} | primary {r['primary']:.4f}")
+    if 'checkpoint_path' in res:
+        print(f"  checkpoint: {res['checkpoint_path']}")

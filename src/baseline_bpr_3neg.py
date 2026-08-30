@@ -4,10 +4,11 @@
   --model random: 随机打分（下界，用来自检评测代码没坏）
 只依赖 numpy。用法见 README.md
 """
-import argparse, collections, time
+import argparse, collections, os, time
 import numpy as np
 from data import load, encode, FIELDS
 from evaluate import evaluate
+from checkpoint_utils import save_numpy_checkpoint
 
 def sigmoid(x): return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
 
@@ -136,8 +137,47 @@ class FM:
 # m.step(X_pos, X_neg)
 #     ↓
 # 學習排序
+def build_bpr_pairs(users, labels, n_neg=3, seed=0, rng=None):
+    """Build flattened same-user BPR pairs from training rows only."""
+    if n_neg not in (1, 3, 5):
+        raise ValueError("n_neg must be one of 1, 3, or 5")
+
+    pos_by_user = collections.defaultdict(list)
+    neg_by_user = collections.defaultdict(list)
+    for i, (user, label) in enumerate(zip(users, labels)):
+        if label == 1:
+            pos_by_user[user].append(i)
+        else:
+            neg_by_user[user].append(i)
+
+    pair_pos = []
+    pair_neg = []
+    if rng is None:
+        rng = np.random.default_rng(seed)
+    for user, positives in pos_by_user.items():
+        negatives = neg_by_user.get(user)
+        if not negatives:
+            continue
+        for pos_i in positives:
+            if n_neg == 1:
+                sampled_negatives = (rng.choice(negatives),)
+            else:
+                sampled_negatives = rng.choice(
+                    negatives,
+                    size=n_neg,
+                    replace=(len(negatives) < n_neg)
+                )
+            for neg_i in sampled_negatives:
+                pair_pos.append(pos_i)
+                pair_neg.append(neg_i)
+
+    return (np.asarray(pair_pos, dtype=np.int32),
+            np.asarray(pair_neg, dtype=np.int32))
+
+
 def run_fm(splits, k=16, lr=0.001, epochs=40,
-           bs=8192, patience=4, seed=0, verbose=True):
+           bs=8192, patience=4, seed=0, verbose=True, n_neg=3,
+           checkpoint_dir='results_by_track/bpr/checkpoints/'):
 
     enc, dim = encode(splits)
     # 需要user資料
@@ -145,49 +185,32 @@ def run_fm(splits, k=16, lr=0.001, epochs=40,
     Xva, yva, uva = enc['valid']
     Xte, yte, ute = enc['test']
 
-    # 依照 user 分別整理正例和負例
-    # 正例：long_view = 1
-    # 負例：long_view = 0
-    pos_by_user = collections.defaultdict(list)
-    neg_by_user = collections.defaultdict(list)
-
-    for i, (user, label) in enumerate(zip(utr, ytr)):
-        if label == 1:
-            pos_by_user[user].append(i)
-        else:
-            neg_by_user[user].append(i)
-
-    # 建立 BPR 訓練配對：
-    # 同一個 user 的一筆正例 + 一筆負例
-    pair_pos = []
-    pair_neg = []
-
+    # 只從 train rows 建立同 user 的 flattened positive-negative pairs。
     rng = np.random.default_rng(seed)
-    # 如果某個 user 沒有正例或負例，就無法組成 BPR pair，因此跳過
-    for user in pos_by_user:
-        if user not in neg_by_user:
-            continue
-
-        positives = pos_by_user[user]
-        negatives = neg_by_user[user]
-
-        for pos_i in positives:
-            neg_i = rng.choice(negatives)
-            pair_pos.append(pos_i)
-            pair_neg.append(neg_i)
-
-    pair_pos = np.asarray(pair_pos, dtype=np.int32)
-    pair_neg = np.asarray(pair_neg, dtype=np.int32)
+    pair_pos, pair_neg = build_bpr_pairs(
+        utr, ytr, n_neg=n_neg, seed=seed, rng=rng
+    )
 
     if verbose:
-        print(f"BPR pairs: {len(pair_pos):,d}")
+        print(f"n_neg={n_neg} | seed={seed} | k={k} | lr={lr} | "
+              f"batch_size={bs} | epochs={epochs} | patience={patience}")
+        print(f"negative_sampling=random_same_user | BPR pairs: {len(pair_pos):,d}")
 
     # 建立 FM 模型
     m = FM(dim, k=k, lr=lr, seed=seed)
 
+    if len(pair_pos) == 0:
+        if verbose:
+            print("No valid same-user BPR pairs; skipping training.")
+        return {
+            'valid': evaluate(uva, yva, m.predict(Xva)),
+            'test': evaluate(ute, yte, m.predict(Xte))
+        }
+
     best = -1
     best_state = None
     bad = 0
+    checkpoint_path = None
 
     for ep in range(1, epochs + 1):
         # 每個 epoch 重新打亂正負例配對
@@ -224,6 +247,12 @@ def run_fm(splits, k=16, lr=0.001, epochs=40,
                 m.W.copy(),
                 np.float32(m.b)
             )
+            checkpoint_path = save_numpy_checkpoint(
+                os.path.join(checkpoint_dir, f'bpr__nneg{n_neg}__seed{seed}__best.npz'),
+                m, dim=dim, k=k, lr=lr, l2=m.l2,
+                seed=seed, best_epoch=ep, valid_metrics=va, n_neg=n_neg,
+                method='bpr_random_same_user'
+            )
         else:
             bad += 1
             if bad >= patience:
@@ -236,7 +265,8 @@ def run_fm(splits, k=16, lr=0.001, epochs=40,
 
     return {
         'valid': evaluate(uva, yva, m.predict(Xva)),
-        'test': evaluate(ute, yte, m.predict(Xte))
+        'test': evaluate(ute, yte, m.predict(Xte)),
+        'checkpoint_path': checkpoint_path
     }
 
 if __name__ == '__main__':
@@ -248,13 +278,20 @@ if __name__ == '__main__':
     ap.add_argument('--lr', type=float, default=0.001)
     ap.add_argument('--epochs', type=int, default=40)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--n_neg', type=int, choices=[1, 3, 5], default=3,
+                    help='random same-user negatives per positive (default: 3)')
+    ap.add_argument('--checkpoint_dir', default='results_by_track/bpr/checkpoints/')
     a = ap.parse_args()
     print(f"loading {a.data_dir} ...")
     splits = load(a.data_dir)
     print({k_: len(v) for k_, v in splits.items()}, f"fields={FIELDS}")
     res = {'pop': run_pop, 'random': lambda s: run_random(s, a.seed),
-           'fm': lambda s: run_fm(s, k=a.k, lr=a.lr, epochs=a.epochs, seed=a.seed)}[a.model](splits)
+           'fm': lambda s: run_fm(s, k=a.k, lr=a.lr, epochs=a.epochs,
+                                  seed=a.seed, n_neg=a.n_neg,
+                                  checkpoint_dir=a.checkpoint_dir)}[a.model](splits)
     print(f"\n=== {a.model} (seed={a.seed}) ===")
     for sp in ('valid', 'test'):
         r = res[sp]
         print(f"  {sp:5s}  GAUC {r['GAUC']:.4f} | nDCG@5 {r['nDCG@5']:.4f} | primary {r['primary']:.4f}")
+    if 'checkpoint_path' in res:
+        print(f"  checkpoint: {res['checkpoint_path']}")
