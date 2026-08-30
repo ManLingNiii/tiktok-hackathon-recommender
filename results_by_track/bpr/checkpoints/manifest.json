@@ -1,0 +1,27 @@
+{
+  "track": "bpr",
+  "method": "Random same-user BPR",
+  "negative_sampling": "random_same_user",
+  "n_neg": 3,
+  "seed": 0,
+  "best_epoch": 2,
+  "valid_GAUC": 0.6684,
+  "valid_nDCG@5": 0.5364,
+  "valid_primary": 0.6024,
+  "test_GAUC": 0.6636,
+  "test_nDCG@5": 0.5303,
+  "test_primary": 0.5969,
+  "checkpoint_path": "results_by_track/bpr/checkpoints/bpr_random_same_user_nneg3__seed0__best.npz",
+  "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
+  "status": "preliminary_best",
+  "hyperparameters": {
+    "model": "FM",
+    "k": 16,
+    "lr": 0.001,
+    "l2": 1e-06,
+    "batch_size": 8192,
+    "epochs": 40,
+    "patience": 4
+  },
+  "selection_note": "Seed-0 preliminary best candidate; validation primary selected the checkpoint. Test metrics are reported only and were not used for selection."
+}

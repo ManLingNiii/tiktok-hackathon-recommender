@@ -166,3 +166,113 @@ For each run, record:
 - Checkpoint
 - Git commit
 - Notes
+
+## Experiment 4: History aggregate pointwise model (seed 0)
+
+使用七個 aggregate history features、linear logistic pointwise model、binary logistic loss。共同 split 與 seed 固定不變；test 僅報告，不用於選擇模型。
+
+| Method | Best epoch | Valid GAUC | Valid nDCG@5 | Valid primary | Gain vs BPR n_neg=1 | Test GAUC | Test nDCG@5 | Test primary |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| History linear logistic | 1 | 0.5155245 | 0.47333515 | 0.49442983 | -0.10767017 | 0.50598377 | 0.45503333 | 0.48050857 |
+
+- Seed: `0`
+- Features: `user_history_count`, `user_history_long_view_rate`, `user_history_click_rate`, `candidate_video_seen_count`, `candidate_author_seen_count`, `candidate_author_long_view_rate`, `time_since_user_last_action`
+- Training settings: `lr=0.001`, `l2=1e-6`, `batch_size=8192`, `epochs=40`, `patience=4`
+- Training time: not recorded end-to-end; the script only emitted per-epoch timing
+- Checkpoint: `results_by_track/history/checkpoints/history__seed0__best.npz`
+- Git commit: `bb90e964d9d1109e0064e2491f2df5aeba196823`
+- Status: preliminary seed-0 result; regression versus both BPR references; not statistically significant
+- Machine-readable result: `results_by_track/history/metrics/history_aggregate_seed0.json`
+
+## Experiment 6: History aggregate scaling correction (seed 0)
+
+本次只修正數值尺度：count features 使用 `log1p`；time gap 先由毫秒轉為小時，再使用 `log1p(max(gap, 0))`。沒有新增 feature、修改模型、split 或 evaluation。Validation primary 用於選擇最佳 epoch，test 僅作最終報告。
+
+| Method | Best epoch | Valid GAUC | Valid nDCG@5 | Valid primary | Gain vs original history | Gain vs BPR n_neg=1 | Test GAUC | Test nDCG@5 | Test primary |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| History linear logistic (scaled) | 2 | 0.5132645 | 0.47218773 | 0.4927261 | -0.00170373 | -0.1093739 | 0.50598687 | 0.45431086 | 0.48014885 |
+
+- Seed: `0`
+- Training settings: `lr=0.001`, `l2=1e-6`, `batch_size=8192`, `epochs=40`, `patience=4`
+- Features: same seven aggregate history features, fixed feature order
+- Negative time gaps: train `0`, valid `0`, test `1`; negative values were clamped to zero without deleting rows
+- Training time: not recorded end-to-end by the script
+- Checkpoint: `results_by_track/history/checkpoints/history__seed0__best.npz`
+- Git commit: `bb90e964d9d1109e0064e2491f2df5aeba196823`
+- Classification: no meaningful improvement versus the original history run; still a regression versus BPR. This is seed-0 evidence only.
+- Machine-readable result: `results_by_track/history/metrics/history_aggregate_scaled_seed0.json`
+
+## Experiment 7: History FM pointwise model (seed 0)
+
+本次只將 scaled history 的 linear logistic model 替換為 history 專用 FM；7 個 numeric history features、5 個 categorical fields、dataset、split、evaluation 與訓練設定固定不變。Validation primary 用於選擇最佳 epoch，test 僅作報告。
+
+| Track | Model | Loss | Best epoch | Valid GAUC | Valid nDCG@5 | Valid primary | Test GAUC | Test nDCG@5 | Test primary |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| history | FM | pointwise binary logistic | 3 | 0.66578263 | 0.53521466 | 0.6004987 | 0.65968186 | 0.5285109 | 0.5940964 |
+
+- Seed: `0`; `k=16`; `lr=0.001`; `l2=1e-6`; `batch_size=8192`; `epochs=40`; `patience=4`
+- Numeric features: the existing seven scaled history features, unchanged and in the original order
+- Categorical fields: `user_id`, `video_id`, `author_id`, `tab`, `duration_bucket`
+- Gain vs scaled linear history: `+0.1077726` validation primary
+- Gain vs Pure BPR n_neg=1: `-0.0016013` validation primary
+- Gain vs Random BPR n_neg=3: `-0.0019013` validation primary
+- Training time: not recorded end-to-end by the current script
+- Checkpoint: `results_by_track/history/checkpoints/history_fm__seed0__best.npz`
+- Git commit: `bb90e964d9d1109e0064e2491f2df5aeba196823`
+- Classification: weak candidate improvement versus scaled linear history, but no meaningful improvement versus BPR. Seed-0 evidence only; not statistically significant.
+- Machine-readable result: `results_by_track/history/metrics/history_fm_seed0.json`
+
+## Experiment 8: History FM Group A ablation (seed 0)
+
+H0 與 H1 使用完全相同的 dataset、split、FM、pointwise binary logistic loss、seed 與訓練設定；唯一差異是 H1 額外加入 `user_behavior` group。結果是 preliminary ablation，不代表統計顯著。
+
+| Config | Feature groups | Best epoch | Valid GAUC | Valid nDCG@5 | Valid primary | Test GAUC | Test nDCG@5 | Test primary |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| H0 | `base` | 3 | 0.66578263 | 0.53521466 | 0.60049870 | 0.65968186 | 0.52851090 | 0.59409640 |
+| H1 | `base,user_behavior` | 3 | 0.66576385 | 0.53516700 | 0.60046540 | 0.65978634 | 0.52855220 | 0.59416926 |
+
+- H1 gain vs H0 validation primary: `-0.00003330`
+- H1 validation GAUC and nDCG@5 both slightly decreased.
+- Test GAUC, nDCG@5 and primary slightly increased, so validation/test directions are not fully一致。
+- Both runs had no NaN/Inf in feature diagnostics and used validation primary for checkpoint selection; test was not used for epoch selection.
+- Training time: not recorded end-to-end by the current script
+- H0 checkpoint: `results_by_track/history/checkpoints/history_fm__base__seed0__best.npz`
+- H1 checkpoint: `results_by_track/history/checkpoints/history_fm__base_user_behavior__seed0__best.npz`
+- Classification: no meaningful improvement; H1 should not replace H0 based on this single seed.
+- Machine-readable results: `results_by_track/history/metrics/history_fm_ablation_base_user_behavior_seed0.json`
+
+## Experiment 9: History FM video_history ablation (seed 0)
+
+本次只將 H0 的 feature group 從 `base` 改為 `base,video_history`；model、pointwise binary logistic loss、seed、split、evaluation 與訓練設定固定不變。結果是 preliminary ablation，不代表統計顯著。
+
+| Config | Feature groups | Best epoch | Valid GAUC | Valid nDCG@5 | Valid primary | Test GAUC | Test nDCG@5 | Test primary |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| H0 | `base` | 3 | 0.66578263 | 0.53521466 | 0.60049870 | 0.65968186 | 0.52851090 | 0.59409640 |
+| H2 | `base,video_history` | 3 | 0.66555333 | 0.53509360 | 0.60032344 | 0.65962636 | 0.52809130 | 0.59385884 |
+
+- H2 gain vs H0 validation primary: `-0.00017526`
+- Validation GAUC and nDCG@5 both decreased; test GAUC, nDCG@5 and primary also decreased.
+- No NaN/Inf was reported in feature diagnostics, and test was not used for epoch selection.
+- Training time: not recorded end-to-end by the current script
+- Checkpoint: `results_by_track/history/checkpoints/history_fm__base_video_history__seed0__best.npz`
+- Git commit: `bb90e964d9d1109e0064e2491f2df5aeba196823`
+- Classification: no meaningful improvement; video_history should not replace H0 based on this seed-0 ablation.
+- Machine-readable result: `results_by_track/history/metrics/history_fm_video_history_seed0.json`
+
+## Experiment 9: History FM video_history ablation (seed 0)
+
+本次只將 H0 的 feature group 從 `base` 改為 `base,video_history`；model、pointwise binary logistic loss、seed、split、evaluation 與訓練設定固定不變。結果是 preliminary ablation，不代表統計顯著。
+
+| Config | Feature groups | Best epoch | Valid GAUC | Valid nDCG@5 | Valid primary | Test GAUC | Test nDCG@5 | Test primary |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| H0 | `base` | 3 | 0.66578263 | 0.53521466 | 0.60049870 | 0.65968186 | 0.52851090 | 0.59409640 |
+| H2 | `base,video_history` | 3 | 0.66555333 | 0.53509360 | 0.60032344 | 0.65962636 | 0.52809130 | 0.59385884 |
+
+- H2 gain vs H0 validation primary: `-0.00017526`
+- Validation GAUC and nDCG@5 both decreased; test GAUC, nDCG@5 and primary also decreased.
+- No NaN/Inf was reported in feature diagnostics, and test was not used for epoch selection.
+- Training time: not recorded end-to-end by the current script
+- Checkpoint: `results_by_track/history/checkpoints/history_fm__base_video_history__seed0__best.npz`
+- Git commit: `bb90e964d9d1109e0064e2491f2df5aeba196823`
+- Classification: no meaningful improvement; video_history should not replace H0 based on this seed-0 ablation.
+- Machine-readable result: `results_by_track/history/metrics/history_fm_video_history_seed0.json`

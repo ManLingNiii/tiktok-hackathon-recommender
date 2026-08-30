@@ -43,9 +43,9 @@
       "test_primary": 0.5969,
       "gain_vs_n_neg_1": 0.0003,
       "training_time_sec": null,
-      "checkpoint_path": null,
+      "checkpoint_path": "results_by_track/bpr/checkpoints/bpr_random_same_user_nneg3__seed0__best.npz",
       "git_commit": "6df800fed1e97b3dc4e878c4d91240c0df171bbf",
-      "notes": "Validation primary is marginally higher; below the 0.002 candidate-improvement threshold."
+      "notes": "Validation primary is marginally higher; below the 0.002 candidate-improvement threshold. Checkpoint exported from the rerun at the recorded best epoch."
     },
     {
       "n_neg": 5,
