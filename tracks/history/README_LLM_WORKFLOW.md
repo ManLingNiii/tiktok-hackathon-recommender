@@ -28,12 +28,12 @@ The LLM proposes candidate features; gradient descent learns the feature's
 model parameters and weighting; validation determines which candidate is
 promoted.
 
-Coverage is handled in two stages. Training-only profiling may provide
-estimated coverage to the LLM, allowing it to prefer candidate keys that are
-likely to be sufficiently populated. The estimate is advisory only. The
-pipeline independently calculates actual validation coverage and applies the
-fixed 5% eligibility rule. The threshold is declared before the official
-validation comparison and is not changed using validation results.
+Coverage is handled in two stages. A training-only coverage estimate can be
+provided to the LLM as advisory context, but the current captured run did not
+use a separate profiler. The pipeline independently calculates actual
+validation coverage and applies the fixed 5% eligibility rule. The threshold
+is declared before the official validation comparison and is not changed using
+validation results.
 
 ## Step 1: LLM feature proposal
 
@@ -71,7 +71,9 @@ that is identical for every candidate shown to one user cannot change the
 ranking order, so the pipeline rejects such a feature rather than silently
 spending a training run on a feature known to be ineffective.
 
-History is computed chronologically from training interactions only. Validation
+History is computed chronologically from training interactions only. In the
+current loader, chronology is represented by dataset date and source-row order
+because the encoded row tuple does not expose raw `time_ms`. Validation
 rows do not contribute labels or future interactions to feature construction,
 and the test set is not used for proposal generation, tuning, or checkpoint
 selection.
@@ -107,9 +109,10 @@ For each feature, the model contains:
 The history coefficient is learned during training. No fixed `0.25` weight is
 added manually.
 
-Each candidate is independently trained and evaluated on validation. The
-workflow records the feature ID, display name, full specification, learned
-weight, checkpoint information, GAUC, nDCG@5, primary score, and best epoch.
+Each eligible candidate is independently trained and evaluated on validation.
+The workflow records the feature ID, display name, full specification, learned
+weight, GAUC, nDCG@5, primary score, coverage, and best epoch. Only the
+selected top-1 model checkpoint is saved.
 
 ## Step 3: Top-1 selection
 
@@ -162,4 +165,7 @@ The workflow writes:
 
 This separation makes the LLM's proposal auditable while keeping model
 training, feature weighting, validation, and top-1 selection deterministic
-under seed `0`.
+under seed `0`. In the latest captured run, six proposals were received, four
+were rejected for coverage below 5%, and the selected feature was
+`smoothed_positive_rate_long_view_tab` with validation primary `0.60164` and
+93.31% validation coverage.

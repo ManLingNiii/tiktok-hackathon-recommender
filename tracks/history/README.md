@@ -100,28 +100,31 @@ Shared FM baseline, seed `0`:
 - nDCG@5: `0.53580`
 - Primary: `0.60150`
 
-Each candidate below was independently trained end-to-end with the same
-hyperparameters and evaluated on the official validation split:
+Only candidates meeting the 5% validation-coverage threshold were trained.
+Each accepted candidate was trained end-to-end with the same hyperparameters
+and evaluated on the official validation split:
 
-| Candidate history feature | Valid GAUC | Valid nDCG@5 | Valid primary | Learned linear weight |
-|---|---:|---:|---:|---:|
-| **`author_affinity_rate`** | **0.66840** | **0.53670** | **0.60255** | **-0.1997** |
-| `recent_engagement_rate` | 0.66746 | 0.53654 | 0.60200 | -0.2587 |
-| `dur_bucket_affinity` | 0.66669 | 0.53603 | 0.60136 | -0.1955 |
-| `author_interaction_ratio` | 0.66697 | 0.53571 | 0.60134 | -0.1367 |
-| `author_interaction_count` | 0.66606 | 0.53533 | 0.60070 | -0.1660 |
-| `same_author_as_candidate` | 0.66588 | 0.53535 | 0.60062 | -0.1671 |
+| Candidate history feature | Validation coverage | Valid GAUC | Valid nDCG@5 | Valid primary | Learned linear weight |
+|---|---:|---:|---:|---:|---:|
+| **`smoothed_positive_rate_long_view_tab`** | **93.31%** | **0.66686** | **0.53643** | **0.60164** | **-0.1896** |
+| `duration_bucket_affinity_duration_ms_long_view` | 90.17% | 0.66669 | 0.53603 | 0.60136 | -0.1955 |
+
+The following proposals were rejected before training because their validation
+coverage was below 5%: user-video affinity (1.62%), user-author affinity
+(3.38%), author interaction count (3.38%), and recency-weighted author
+affinity (3.38%).
 
 The older pre-LLM comparison results below are retained for historical
 comparison. The official LLM-workflow model is the coverage-filtered result
 above.
 
-Final selected model for the pre-LLM comparison:
+Final selected model for the coverage-filtered LLM workflow:
 
-- Selected feature: `author_affinity_rate`
-- Valid primary: `0.60255`
-- Gain versus shared baseline: `+0.00105`
-- Best epoch: `7`
+- Selected feature: `smoothed_positive_rate_long_view_tab`
+- Valid primary: `0.60164`
+- Gain versus shared baseline: `+0.00014`
+- Validation coverage: `93.31%`
+- Best epoch: `5`
 - Seed: `0`
 
 ## Training configuration
@@ -140,7 +143,10 @@ Final selected model for the pre-LLM comparison:
 ## Artifacts
 
 - Checkpoint: `results_by_track/history/checkpoints/history_top1_seed0.npz`
-- Metrics: `results_by_track/history/metrics/history_top1_seed0.json`
+- Metrics: `results_by_track/history/metrics/workflow_seed0.json`
 - Manifest: `results_by_track/history/manifest.json`
-- Feature proposal: `feature_proposal.py`
+- Raw proposal: `results_by_track/history/metrics/raw_llm_response.json`
+- Prompt: `results_by_track/history/metrics/llm_prompt.txt`
+- Feature proposal schema: `llm_feature_proposal.py`
 - Safer protocol experiments: `protocols.py`
+- Archived historical metrics: `results_by_track/history/archive/metrics/`
