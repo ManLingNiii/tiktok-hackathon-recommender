@@ -1,9 +1,16 @@
 # Final History Track
 
-This is the final end-to-end History model entry point. It trains six separate
-candidate models, selects the top-1 feature by validation primary, and saves
-only the selected candidate as the final model. The latest seed-0 run selected
-`author_affinity_rate`.
+This is the History track pipeline. The six features below are the intended
+output of the feature-proposal stage: they are candidate computations that an
+LLM should propose after reasoning over the schema and history constraints.
+They are not manually selected model inputs in the `history_with_LLM` branch.
+That branch captures the LLM's structured proposal, validates it, assigns
+stable canonical IDs, and passes the resulting candidates through training and
+top-1 selection.
+
+The older `history-final` workflow starts directly with these six expected
+proposal outputs. It is the pre-LLM comparison branch and does not claim that
+a live LLM generated the list during execution.
 
 - `same_author_as_candidate`
 - `author_interaction_count`
@@ -13,19 +20,64 @@ only the selected candidate as the final model. The latest seed-0 run selected
 - `dur_bucket_affinity`
 
 The selected history field is a numeric FM field with a learned linear weight
-and learned interaction embedding. There is no fixed `0.25` history weight.
+and learned interaction embedding. There is no fixed `0.25` history weight or
+preassigned top-1 feature.
 History is constructed from chronological training interactions only;
 validation selects the best epoch. Test is not used.
 
-Run from the repository root:
+Run the pre-LLM comparison workflow from the repository root:
 
 ```bash
 PYTHONPATH=src python3 tracks/history/train.py \
   --data_dir "./KuaiRand-Pure/data copy"
 ```
 
-This file contains the complete model implementation and is the source of
-truth for the final track.
+`train.py` contains the reusable model and history-feature computation. The
+complete proposal-to-selection entry point is `workflow.py`; it is the source
+of truth when running the autonomous workflow below.
+
+## Workflow
+
+Use `feature_proposal.py` to generate the schema-constrained prompt. Save the
+actual LLM JSON response, then run:
+
+```bash
+PYTHONPATH=src python3 tracks/history/workflow.py \
+  --data_dir "./KuaiRand-Pure/data copy" \
+  --proposals proposals.json
+```
+
+`workflow.py` never trusts an LLM-provided name. It validates each computation
+spec, derives a canonical ID from the spec content, maps the validated spec to
+the feature computation adapter, trains every candidate, and selects by
+validation primary. The LLM proposal response should be committed as a run
+input alongside the metrics for reproducibility.
+
+The proposal file is intentionally an explicit input and represents a captured
+one-time LLM run; this repository does not contain credentials or pretend to
+make a live per-run LLM call. Generate it by sending
+`llm_feature_proposal.proposal_prompt()` to the chosen LLM, save its JSON-only
+response, and pass that file to `workflow.py`. Thus the six candidates are no
+longer authored as the execution list; they are simply the historical set of
+valid proposals that the adapter can reproduce.
+
+Validation rejects proposals that violate the ranking constraint. In
+particular, a statistic using only user-side fields is rejected because it is
+constant across a user's candidates and cannot change their ranking. The
+workflow also saves the exact proposal response and prompt to
+`results_by_track/history/metrics/raw_llm_response.json` and
+`results_by_track/history/metrics/llm_prompt.txt`.
+
+The expected proposal output is the six candidate computations listed above.
+The LLM must return structured specifications rather than bare names. The
+pipeline rejects invalid or duplicate proposals before training.
+
+## Feature proposal stage
+
+`feature_proposal.py` defines the source schema and constraints. An agent may
+replace or extend the proposal list, provided each candidate uses only fields
+available at prediction time and train-only history. The existing candidate
+training and validation selection then runs unchanged.
 
 ## Validation results
 
@@ -73,5 +125,5 @@ Final selected model:
 - Checkpoint: `results_by_track/history/checkpoints/history_top1_seed0.npz`
 - Metrics: `results_by_track/history/metrics/history_top1_seed0.json`
 - Manifest: `results_by_track/history/manifest.json`
-- Feature-selection helper: `feature_selection.py`
+- Feature proposal: `feature_proposal.py`
 - Safer protocol experiments: `protocols.py`
