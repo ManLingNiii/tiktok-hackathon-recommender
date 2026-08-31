@@ -5,8 +5,7 @@
 - `agent/` source、reviewed modules、allowlist 與 bounded search-space generator
 - `kuairand-starter-kit/` 官方 starter code
 - README、WORKFLOW、環境設定與操作文件
-- `submission_ready/manifest.json`、adapter、generator、local checker 與 README
-- `test/experiment_records/EXPERIMENT_SUMMARY.md`
+- `submission_ready/composition_manifest.json`、checkpoint registry、adapter、generator、local checker 與 README
 
 ## 必須留在本地
 
@@ -15,7 +14,7 @@
 - `.env`、API key、token、private key
 - transfer zip 與本機 logs／patches
 
-`outputs/pure/` 下的 frozen `.npz` 是唯一例外，必須透過 Git LFS 追蹤；目前共 11 個檔案，約 34.6 MB。
+`outputs/pure/` 下的 frozen `.npz` 是唯一例外，必須透過 Git LFS 追蹤；目前保留五個 family initial checkpoint 與一個 prepared composition checkpoint。
 
 ## Push 前命令
 

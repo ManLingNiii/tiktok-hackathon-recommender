@@ -28,12 +28,21 @@ test/experiment_records/*
 # Imported integration bundle is a local transfer artifact, not source.
 listwise_model_integration_bundle.zip
 
+# Archived local weights moved out of the active model directories.
+others/
+
 # Keep curated documentation and source code tracked.
 
 # Frozen Pure submission assets are intentionally versioned with Git LFS so a
 # fresh clone can run submission_ready without a separate checkpoint transfer.
 !outputs/
 !outputs/pure/
+!outputs/pure/bpr_initial.npz
+!outputs/pure/listwise_initial.npz
+!outputs/pure/history_fm_initial.npz
+!outputs/pure/multitask_initial.npz
+!outputs/pure/cwm_initial.npz
+!outputs/pure/composition_task_multi_seed_confirmation_000.npz
 !outputs/pure/baseline_fm_best.npz
 !outputs/pure/bpr_fm_best.npz
 !outputs/pure/cwm_fm_best.npz

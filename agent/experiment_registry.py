@@ -17,4 +17,7 @@ def validate_plan(plan):
         raise ValueError("test split is forbidden during development")
     if any(p in plan.get("files", []) for p in REGISTRY["forbidden_paths"]):
         raise ValueError("forbidden path in experiment plan")
+    hypothesis = plan.get("hypothesis")
+    if hypothesis is not None and (not isinstance(hypothesis, str) or not hypothesis.strip() or len(hypothesis) > 1000):
+        raise ValueError("hypothesis must be a non-empty string of at most 1000 characters")
     return True

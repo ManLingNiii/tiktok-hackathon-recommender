@@ -1,0 +1,195 @@
+{
+  "status": "prepared_not_submitted",
+  "dataset": "KuaiRand-Pure",
+  "target": "long_view",
+  "selection_metric": "mean(GAUC, nDCG@5)",
+  "validation_only": true,
+  "test_used": false,
+  "model": "composition_fm",
+  "composition_model": "small_mlp",
+  "composition_loss": "0.6_listwise_0.4_bpr",
+  "composition": {
+    "composition_code": "11111",
+    "component_ids": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "components": [
+      "bpr_fm",
+      "listwise_fm",
+      "history_fm",
+      "multitask_fm",
+      "cwm_fm"
+    ],
+    "weights": [
+      0.19797965,
+      0.20300819,
+      0.20334155,
+      0.19786955,
+      0.19780106
+    ],
+    "bias": 0.0
+  },
+  "normalization": "user_zscore",
+  "feature_schema": "none",
+  "family_id_map": {
+    "1": "bpr_fm",
+    "2": "listwise_fm",
+    "3": "history_fm",
+    "4": "multitask_fm",
+    "5": "cwm_fm"
+  },
+  "composition_seed": 0,
+  "initial_seed": 0,
+  "checkpoint_registry": "submission_ready\\checkpoint_registry.json",
+  "initial_checkpoint_registry": {
+    "bpr_fm": {
+      "family_id": 1,
+      "checkpoint": "outputs/pure/bpr_initial.npz",
+      "source": "ManLingNiii/tiktok-hackathon-recommender:bpr_n_neg3_seed0",
+      "negative_sampling": "random_same_user",
+      "n_neg": 3,
+      "validation_metrics": {
+        "GAUC": 0.6684,
+        "nDCG@5": 0.5364,
+        "primary": 0.6024
+      },
+      "confirmation_metrics": null,
+      "confirmation_status": "not_available_in_bpr_branch_validation_only_record"
+    },
+    "listwise_fm": {
+      "family_id": 2,
+      "checkpoint": "outputs/pure/listwise_initial.npz",
+      "source": "offline_team_seed0",
+      "validation_metrics": {
+        "GAUC": 0.6671480536460876,
+        "nDCG@5": 0.535823404788971,
+        "primary": 0.6014857292175293,
+        "users": 22377.0,
+        "rows": 124909.0
+      },
+      "confirmation_metrics": {
+        "GAUC": 0.6600850224494934,
+        "nDCG@5": 0.530775249004364,
+        "primary": 0.5954301357269287,
+        "users": 5729.0,
+        "rows": 32224.0
+      }
+    },
+    "history_fm": {
+      "family_id": 3,
+      "checkpoint": "outputs/pure/history_fm_initial.npz",
+      "source": "ManLingNiii/tiktok-hackathon-recommender:history-final",
+      "selected_feature": "author_affinity_rate",
+      "validation_metrics": {
+        "GAUC": 0.6684041619300842,
+        "nDCG@5": 0.5366986989974976,
+        "primary": 0.6025514602661133,
+        "users": 22377.0,
+        "rows": 124909.0
+      },
+      "confirmation_metrics": {
+        "GAUC": 0.6616471409797668,
+        "nDCG@5": 0.5317275524139404,
+        "primary": 0.5966873168945312,
+        "users": 5729.0,
+        "rows": 32224.0
+      },
+      "confirmation_status": "evaluated_by_local_confirmation_guard"
+    },
+    "multitask_fm": {
+      "family_id": 4,
+      "checkpoint": "outputs/pure/multitask_initial.npz",
+      "source": "local_autonomous_multitask_initial",
+      "validation_metrics": {
+        "GAUC": 0.67097407579422,
+        "nDCG@5": 0.537966251373291,
+        "primary": 0.6044701337814331,
+        "users": 22377.0,
+        "rows": 124909.0
+      },
+      "confirmation_metrics": {
+        "GAUC": 0.6650501489639282,
+        "nDCG@5": 0.533405601978302,
+        "primary": 0.5992279052734375,
+        "users": 5729.0,
+        "rows": 32224.0
+      }
+    },
+    "cwm_fm": {
+      "family_id": 5,
+      "checkpoint": "outputs/pure/cwm_initial.npz",
+      "source": "offline_team_seed0",
+      "validation_metrics": {
+        "GAUC": 0.6673935055732727,
+        "nDCG@5": 0.5360676050186157,
+        "primary": 0.6017305850982666,
+        "users": 22377.0,
+        "rows": 124909.0
+      },
+      "confirmation_metrics": {
+        "GAUC": 0.6606566309928894,
+        "nDCG@5": 0.5317211151123047,
+        "primary": 0.5961889028549194,
+        "users": 5729.0,
+        "rows": 32224.0
+      }
+    }
+  },
+  "validation_metrics": {
+    "GAUC": 0.6704182332651187,
+    "nDCG@5": 0.5375522703518922,
+    "primary": 0.6039852518085055,
+    "users": 22377.0,
+    "rows": 124909.0
+  },
+  "confirmation_metrics": {
+    "GAUC": 0.6635385190946687,
+    "nDCG@5": 0.5328466060343461,
+    "primary": 0.5981925625645074,
+    "users": 5729.0,
+    "rows": 32224.0
+  },
+  "checkpoint_members": [
+    {
+      "family": "bpr_fm",
+      "path": "outputs/pure/bpr_initial.npz",
+      "weight": 0.19797965
+    },
+    {
+      "family": "listwise_fm",
+      "path": "outputs/pure/listwise_initial.npz",
+      "weight": 0.20300819
+    },
+    {
+      "family": "history_fm",
+      "path": "outputs/pure/history_fm_initial.npz",
+      "weight": 0.20334155
+    },
+    {
+      "family": "multitask_fm",
+      "path": "outputs/pure/multitask_initial.npz",
+      "weight": 0.19786955
+    },
+    {
+      "family": "cwm_fm",
+      "path": "outputs/pure/cwm_initial.npz",
+      "weight": 0.19780106
+    }
+  ],
+  "composition_checkpoint": "outputs\\pure\\composition_task_multi_seed_confirmation_000.npz",
+  "schema_analysis": {
+    "source": "train_only",
+    "task": "multi_seed_confirmation",
+    "feature_names": [
+      "none"
+    ]
+  },
+  "generator": "submission_ready/generate_submission.py",
+  "local_checker": "submission_ready/local_checker.py",
+  "submission_csv": null,
+  "final_test_check": "deferred_until_manual_confirmation"
+}

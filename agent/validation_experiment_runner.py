@@ -13,6 +13,11 @@ import sys
 import time
 import uuid
 from datetime import datetime, timezone
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
 try:
     from dataset_config import dataset_name, runs_dir
 except ImportError:
@@ -21,6 +26,10 @@ try:
     from headroom_interface import validate_result
 except ImportError:
     from agent.headroom_interface import validate_result
+try:
+    from config_generator import validate_composition_config
+except ImportError:
+    from agent.config_generator import validate_composition_config
 
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -45,7 +54,7 @@ def validate_spec(name, spec):
     command = spec.get("command", [])
     allowed = [["agent/validation_only.py"], ["agent/experiments/bpr_fm.py"]]
     if len(command) >= 2 and command[:1] == ["agent/formal_trainer.py"]:
-        if len(command) != 3 or command[1] != "--mode" or command[2] not in {"listwise","listwise_ensemble","history","multitask","cwm"}:
+        if len(command) != 3 or command[1] != "--mode" or command[2] not in {"listwise","history","multitask","cwm","composition"}:
             raise ValueError("invalid formal trainer mode")
     elif command not in allowed:
         raise ValueError("only reviewed validation-only modules may run")
@@ -79,16 +88,20 @@ def parse_child_record(output, name):
 def code_audit(run_id):
     """Record the project code snapshot used for this validation run."""
     status = subprocess.run(["git", "status", "--short", "--", "agent"],
-                            cwd=ROOT, text=True, capture_output=True)
+                            cwd=ROOT, text=True, encoding="utf-8", errors="replace",
+                            capture_output=True)
     diff = subprocess.run(["git", "diff", "--no-ext-diff", "HEAD", "--", "agent"],
-                          cwd=ROOT, text=True, capture_output=True)
+                          cwd=ROOT, text=True, encoding="utf-8", errors="replace",
+                          capture_output=True)
+    status_text = status.stdout or ""
+    diff_text = diff.stdout or ""
     changed_files = [line[3:] if len(line) >= 3 else line
-                     for line in status.stdout.splitlines() if line.strip()]
+                     for line in status_text.splitlines() if line.strip()]
     patch_path = os.path.join(RUNS, f"{run_id}_code_diff.patch")
     with open(patch_path, "w", encoding="utf-8") as fh:
-        fh.write(diff.stdout)
+        fh.write(diff_text)
     return {"changed_files": changed_files, "patch_path": patch_path,
-            "sha256": hashlib.sha256(diff.stdout.encode("utf-8")).hexdigest(),
+            "sha256": hashlib.sha256(diff_text.encode("utf-8")).hexdigest(),
             "git_status_exit_code": status.returncode}
 
 
@@ -98,6 +111,12 @@ def run(name="baseline_fm"):
         raise ValueError(f"unknown experiment: {name}")
     spec = specs[name]
     validate_spec(name, spec)
+    if name == "composition_fm":
+        raw_config = os.environ.get("AGENT_MODEL_CONFIG", "{}")
+        try:
+            validate_composition_config(json.loads(raw_config))
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
+            raise ValueError(f"invalid composition recipe: {exc}") from exc
     os.makedirs(RUNS, exist_ok=True)
     start = time.time()
     run_id = (f"{dataset_name()}-"
@@ -113,7 +132,7 @@ def run(name="baseline_fm"):
     try:
         proc = subprocess.run(
             [sys.executable, "-u", *spec["command"]],
-            cwd=ROOT, text=True, capture_output=True,
+            cwd=ROOT, text=True, encoding="utf-8", errors="replace", capture_output=True,
             timeout=3600 if dataset_name() in {"1k", "kuairand_1k"} else 1200,
             env={**os.environ, "AGENT_MODEL_CONFIG": os.environ.get("AGENT_MODEL_CONFIG", "{}")},
         )
@@ -130,7 +149,7 @@ def run(name="baseline_fm"):
         "iteration": iteration,
         "experiment": name,
         "dataset": dataset_name(),
-        "hypothesis": spec["description"],
+        "hypothesis": (planner_decision or {}).get("hypothesis") or spec["description"],
         "split": "validation_only",
         "status": "success" if proc.returncode == 0 else "failed",
         "returncode": proc.returncode,
@@ -153,15 +172,16 @@ def run(name="baseline_fm"):
             child = parse_child_record(output, name)
             record["metrics"] = child.get("metrics") or parse_metrics(output)
             for key in ("config", "checkpoint", "checkpoint_saved", "family_best_metrics",
-                        "confirmation_metrics", "members", "checkpoint_members"):
+                        "confirmation_metrics", "members", "checkpoint_members", "loss",
+                        "target", "composition_model", "composition_loss", "feature_schema",
+                        "schema_analysis", "composition_manifest", "prediction_analysis",
+                        "feature_variance", "training_history", "raw_weights", "normalized_weights",
+                        "prediction_input_weights", "optimizer"):
                 if key in child:
                     record[key] = child[key]
             record["model_configuration"] = child.get("config", record["model_configuration"])
             if child.get("checkpoint"):
                 record["checkpoint_path"] = child["checkpoint"]
-            elif child.get("members"):
-                record["checkpoint_path"] = "bundle://listwise_ensemble"
-                record["checkpoint_members"] = child["members"]
             if child:
                 validate_result({**record, "status": "success",
                                  "checkpoint": child.get("checkpoint", record.get("checkpoint")),

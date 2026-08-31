@@ -15,12 +15,6 @@
     "module": "listwise_loss", "description": "User-exposure listwise softmax gradient, validation-only",
     "command": ["agent/formal_trainer.py", "--mode", "listwise"], "allowed": true
   },
-  "listwise_ensemble": {
-    "module": "listwise_ensemble",
-    "description": "Imported E-project validation-selected listwise bundle, validation-only",
-    "command": ["agent/formal_trainer.py", "--mode", "listwise_ensemble"],
-    "allowed": true
-  },
   "history_fm": {
     "module": "history_features", "description": "Train-only prior user history feature domains, validation-only",
     "command": ["agent/formal_trainer.py", "--mode", "history"], "allowed": true
@@ -32,5 +26,9 @@
   "cwm_fm": {
     "module": "censored_watch_time", "description": "Normalized censored watch-time objective, validation-only",
     "command": ["agent/formal_trainer.py", "--mode", "cwm"], "allowed": true
+  },
+  "composition_fm": {
+    "module": "composition", "description": "Five-family frozen prediction composition with task-based validation-only research",
+    "command": ["agent/formal_trainer.py", "--mode", "composition"], "allowed": true
   }
 }

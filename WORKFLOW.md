@@ -9,9 +9,16 @@ cd <repository-root>
 
 確認資料位於 `kuairand-starter-kit\KuaiRand-Pure\data`，並先執行 baseline。
 
-## 2. Experiment proposal
+## 2. Task-based experiment proposal
 
-Gemini 或組員提出一個小型假設，例如：
+Planner 每輪只提出一個新的 composition recipe。六個 task 的 budget 為 5/12/10/8/6/9，總上限 50 次：
+
+1. five-family weight learning
+2. additive / interaction learning with pure data
+3. DNN composition with selected pure data
+4. multi-seed and confirmation retention
+
+每個 hypothesis 必須引用上一輪的 metrics、loss、prediction correlation、feature variance 與 failure/recovery evidence。
 
 ```json
 {
@@ -41,14 +48,17 @@ Gemini 或組員提出一個小型假設，例如：
 4. 只從 train 建立 vocabulary、duration buckets 與 history。
 5. validation 不回寫 label 或 feature state。
 6. 在 early stopping 後保存 validation 最佳 checkpoint。
+7. Composition 永遠載入 bpr/listwise/history/multitask/cwm 五個 frozen family，row alignment 後做 user-level z-score；composition code 固定為 `11111`，不得用 bitmask 排除 family。
+8. 第一版只訓練 composition layer 的 nonnegative weights 與 bias；target 固定 `long_view`，loss 固定 `0.6 * within-user listwise + 0.4 * same-user BPR`。family checkpoint 不接受 composition gradient。
+9. pure feature 與 interaction 只能使用 task template 指定的欄位；統計只由 train 建立。
 
-## 5. Decision gate
+## 5. Task transition and decision gate
 
 ```text
-primary_new >= primary_baseline + 0.002
+improvement = primary_current - primary_task_best
 ```
 
-才可進入 candidate；否則保留 log 並回到 baseline。所有實驗都需記錄 status、metrics、runtime、error 與 recovery events。
+`improvement >= 0.002` 時更新 task best、stagnant 歸零並留在目前 task；低於門檻則增加 stagnant。連續兩次低於門檻或達 task budget 才切換下一 task，且 task convergence 不會停止 global agent。候選 checkpoint 會先保存，最終仍須由 validation 與 confirmation 評估。所有實驗需記錄 hypothesis、evidence、change plan、family list、weights、features、loss、target、GAUC、nDCG@5、primary、improvement、stagnant、runtime、error、recovery、test_access 與 checkpoint。
 
 ## 6. Gemini integration boundary
 
@@ -68,19 +78,18 @@ Gemini 不負責：
 - 任意改寫整個 repository
 - 決定是否使用公開 test 成績
 
-## 7. Experiment selection ranking
+## 7. Composition-first experiment selection
 
-`agent/experiment_selector.py` 使用 UCB1 對 `agent/configs/search_space.json`
-中的候選實驗排序。它只讀取 validation leaderboard，未測試候選會保留探索優先權，
-已測試候選則依 validation primary 與探索 bonus 排序。
+目前 agent 只從受控 composition recipe 或 Gemini 提出的合法 composition config
+選擇下一個候選；五個 family 的 initial checkpoint 維持固定，不會被 composition
+搜尋覆蓋。每個候選都必須經過 validation、confirmation 與 promotion gate。
 
 ```powershell
-python -u agent\experiment_selector.py --top 10
+python -u agent\autonomous_agent.py --composition-only --max-iterations 8
 ```
 
-這個 selector 只決定「下一個實驗候選順序」，不改變 GAUC/nDCG@5，也不取代
-`validation_experiment_runner.py` 的安全檢查。最終 promote 仍必須通過 baseline、
-epsilon 與 confirmation guard。
+composition layer 只能調整 family 組合、融合權重與 composition seed；不能修改
+family checkpoint、pretrained 路徑或 family 訓練參數。
 
 ## 8. Final submission
 

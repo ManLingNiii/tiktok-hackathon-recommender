@@ -15,16 +15,20 @@
 ## 主要目錄
 
 - `agent/autonomous_agent.py`：受控 AutoML loop。
-- `agent/config_generator.py`：bounded、deterministic 參數組合器。
+- `agent/config_generator.py`：task-based、bounded、deterministic 參數組合器；每輪只產生一個 recipe。
 - `agent/configs/search_space.json`：固定候選與合法參數 axes。
 - `agent/experiment_specs.json`：experiment allowlist。
 - `agent/validation_experiment_runner.py`：validation-only runner 與 audit。
 - `agent/checkpoint_manager.py`：各 family 最佳權重管理。
+- `agent/research_diagnosis.py`：從 validation／confirmation 指標產生原因分析與下一步策略。
+- `agent/modules/composition.py`：五個 family 全部 frozen 的 composition contract；composition code 固定 `11111`。
+- `agent/modules/context_composition.py`：使用五個 frozen family prediction、train-only user/video/context 特徵與正則化 BPR gate 的 context-aware composition。
 - `agent/modules/`：BPR、Listwise、History、Multi-task、CWM 元件。
 - `kuairand-starter-kit/`：官方 data、evaluate 與 submit checker，只讀使用。
 - `submission_ready/`：frozen manifest、prediction adapter、generator 與 local checker。
 - `runs/`：本地實驗紀錄，不追蹤。
-- `outputs/pure/`：frozen Pure 最佳 checkpoint，使用 Git LFS 追蹤。
+- `outputs/pure/`：Task 1 與目前 prepared composition 所需的 frozen Pure checkpoint，使用 Git LFS 追蹤。
+- `others/`：舊版權重、資料壓縮檔與整合 bundle 封存，不提交。
 
 ## 建立環境
 
@@ -35,6 +39,8 @@ cd <repository-root>
 ```
 
 將主辦方提供的 KuaiRand-Pure 資料放在 `kuairand-starter-kit\KuaiRand-Pure\data\`。原始資料不放入 GitHub。
+
+Clone 後仍需自行放入 KuaiRand-Pure 資料；GitHub 只包含可執行的程式、設定與 frozen checkpoint，不包含原始資料、API key 或本地 runs。
 
 ## 單一 validation 實驗
 
@@ -49,25 +55,29 @@ python -u agent\validation_experiment_runner.py cwm_fm
 
 結果會寫入 `runs\pure\`，包含 JSON、log、leaderboard、planner decision、checkpoint metadata 與 code-diff audit。
 
-## 受控 AutoML
+## 受控 AutoML（50 次 task workflow）
 
 ```powershell
-python -u agent\autonomous_agent.py --max-iterations 100 --use-pretrained
+python -u agent\autonomous_agent.py --max-iterations 50 --use-pretrained
 ```
 
-Planner 會根據 validation 結果選擇下一個 family 與 config。`config_generator.py` 只從 `search_space.json` 登記的有限 axes 產生 deterministic、bounded 組合，並排除已嘗試 config。各 family 的最佳權重位於 `outputs\pure\{experiment}_best.npz`，metadata 位於 `runs\pure\best_models.json`。Pure 的 frozen 最佳 checkpoint 已使用 Git LFS 納入 repository；`runs/` metadata 仍保留在本地，避免上傳大量實驗紀錄。
+Planner 依序執行四個 task：weight learning 12、additive/interaction learning 16、DNN composition 13、multi-seed/confirmation 9，合計最多 50 次。每輪只從 `search_space.json` task template 產生一個新 recipe，根據上一輪的 GAUC、nDCG@5、Primary、loss、feature variance、prediction correlation 與 recovery event 提出 hypothesis。`>=0.002` 改善會留在同一 task；低於門檻連續兩次或達 task 上限才切換 task。狀態保存在 `runs\pure\task_workflow_state.json`。
 
 若所有受控候選耗盡，agent 會安全停止，避免重複實驗造成 validation overfitting。使用 Gemini 時，API key 只放環境變數：
+
+Composition config 也由同一個 generator 管理，但五個 family 永遠全部載入，固定使用 `11111`；只訓練 final composition layer，不會把 loss gradient 傳回 family checkpoint。第一版是 trainable nonnegative linear fusion + bias，loss 固定為 `0.6 * within-user listwise + 0.4 * same-user BPR`，target 固定為 `long_view`。每輪會將 GAUC、nDCG@5、Primary、loss 與 confirmation drift 轉成 `research_analysis`，供下一輪 hypothesis 使用。
+
+Task 2 只允許指定的 pure feature 或單一 prediction interaction；Task 3 才使用 selected pure data 與低容量 `small_mlp` DNN composition。Task 4 用 seed 0/1/2 與 confirmation 統計決定是否保留。所有 pure feature 統計只由 train 建立，validation 不使用 label 回寫。
 
 ```powershell
 $env:PLANNER_BACKEND = "gemini"
 $env:GEMINI_API_KEY = "<your-key>"
-python -u agent\autonomous_agent.py --max-iterations 100 --use-pretrained
+python -u agent\autonomous_agent.py --max-iterations 50 --use-pretrained
 ```
 
 ## 最佳模型 prediction 與 checker
 
-`submission_ready\manifest.json` 是 frozen 模型來源。`prediction_adapter.py` 會驗證 manifest 狀態、checkpoint 路徑、權重總和與檔案存在性。
+`submission_ready\composition_manifest.json` 是目前 frozen composition 模型來源。舊的 listwise candidate 已移至 `others\legacy_candidates\`，不再作為 agent 或 submission baseline。`prediction_adapter.py` 會驗證 manifest 狀態、checkpoint 路徑、權重總和與檔案存在性。
 
 先做 validation preview：
 

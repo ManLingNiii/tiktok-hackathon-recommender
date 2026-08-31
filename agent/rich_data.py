@@ -20,7 +20,7 @@ def load_rich(data_dir):
         with open(os.path.join(data_dir,fn),encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 d=int(r["date"]); base=(d,r["user_id"],r["video_id"],authors.get(r["video_id"],"UNK"),r["tab"],float(r["duration_ms"]))
-                item={"base":base,"y":int(r["long_view"]!="0"),"aux":{k:float(r[k] or 0) for k in AUX},"play":float(r["play_time_ms"] or 0),"duration":float(r["duration_ms"] or 1)}
+                item={"base":base,"y":int(r["long_view"]!="0"),"aux":{k:float(r[k] or 0) for k in AUX},"play":float(r["play_time_ms"] or 0),"duration":float(r["duration_ms"] or 1),"hourmin":int(r.get("hourmin") or 0)}
                 if 20220408<=d<=20220421: tr.append(item)
                 elif 20220422<=d<=(20220508 if suffix == "_1k" else 20220428): va.append(item)
     user={}; tab={}; author={}

@@ -14,9 +14,12 @@ from data import encode
 from evaluate import evaluate
 from modules.loss_adapter import listwise_logit_gradient, normalize_watch_time
 from modules.listwise_loss import complete_user_batches, grouped_listwise_gradient
-from modules.listwise_ensemble import MEMBERS, predict_ensemble
 from rich_data import load_rich, encode_rich
 from modules.headroom_modules import MultiTaskModule
+from modules.composition import predict_composition, save_best_composition_manifest
+from modules.context_composition import (fit_context_composition, save_context_checkpoint,
+                                          fit_composition_layer,
+                                          save_composition_layer_checkpoint)
 try:
     from checkpoint_manager import load_best_parameters, save_if_best
     from validation_guard import evaluate_confirmation
@@ -114,35 +117,72 @@ def _listwise_batches(users, batch_size, rng):
 
 def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patience=None):
     cfg = json.loads(os.environ.get("AGENT_MODEL_CONFIG", "{}"))
+    if mode == "composition" and not cfg:
+        manifest_path = os.path.join(ROOT, "submission_ready", "composition_manifest.json")
+        with open(manifest_path, encoding="utf-8") as fh:
+            manifest = json.load(fh)
+        cfg = dict(manifest.get("composition", {}))
+        cfg["name"] = "manifest_composition"
     k = int(cfg.get("k", 16)); lr = float(cfg.get("lr", .001)); l2 = float(cfg.get("l2", 1e-6))
     epochs = int(cfg.get("epochs", epochs)); batch_size = int(cfg.get("batch_size", batch_size))
     patience = int(cfg.get("patience", 3 if patience is None else patience))
     train_rows,valid_rows=load_rich(DATA)
     if limit: train_rows=train_rows[:limit]; valid_rows=valid_rows[:max(1000,limit//4)]
+    if mode == "composition":
+        # All five offline family checkpoints are frozen.  Only this final
+        # composition layer is trainable for every task candidate.
+        comp_data, comp_state, scores = fit_composition_layer(
+            ROOT, cfg, rich_rows=(train_rows, valid_rows))
+        context_users = comp_data["valid_users"]
+        context_labels = comp_data["valid_labels"]
+        va = evaluate(context_users, context_labels, scores)
+        confirmation = evaluate_confirmation(context_users, context_labels, scores)
+        checkpoint = save_composition_layer_checkpoint(ROOT, comp_state, cfg, va)
+        return {"experiment":"composition_fm", "dataset":dataset_name(), "status":"success",
+                "split":"validation_only", "test_access":False,
+                "metrics":{k:float(v) for k,v in va.items()},
+                "confirmation_metrics":{k:float(v) for k,v in confirmation.items()},
+                "config":cfg, "checkpoint":checkpoint,
+                "checkpoint_saved":True, "family_best_metrics":{},
+                "composition_model":comp_state["model"],
+                "composition_loss":comp_state["loss"],
+                "feature_schema":list(comp_state["feature_names"]),
+                "raw_weights":[float(x) for x in comp_state.get("raw_weights", [])],
+                "normalized_weights":[float(x) for x in comp_state.get("normalized_weights", [])],
+                "prediction_input_weights":[float(x) for x in comp_state.get("prediction_input_weights", [])],
+                "optimizer":comp_state.get("optimizer", "adam"),
+                "loss":float(comp_state.get("train_monitor_loss", 0.0)),
+                "target":"long_view",
+                "prediction_analysis":comp_state.get("prediction_analysis", {}),
+                "feature_variance":comp_state.get("feature_variance", {}),
+                "training_history": comp_state.get("training_history", []),
+                "schema_analysis":{"source":"train_only",
+                                    "feature_names":list(comp_state["feature_names"])},
+                "composition_manifest": {"saved": False, "deferred_until": "multi_seed_confirmation"}}
     # History is a separate reviewed ablation; keep multitask comparable to
     # the official FM/BPR feature space instead of mixing two hypotheses.
     history_cap = int(cfg.get("history_cap", 20))
     history_transform = cfg.get("history_transform", "clip")
-    et,ev,dim=encode_rich(train_rows,valid_rows,include_history=(mode=="history"),
+    et,ev,dim=encode_rich(train_rows,valid_rows,include_history=(mode=="history" or cfg.get("include_history", False)),
                            history_cap=history_cap, history_transform=history_transform)
     Xtr,ytr,train_users,aux_tr,play_tr,dur_tr=et; Xva,yva,users,_,_,_=ev
-    if mode == "listwise_ensemble":
-        scores = predict_ensemble(ROOT, FM, dim, Xva)
-        va = evaluate(users, yva, scores)
-        confirmation = evaluate_confirmation(users, yva, scores)
-        return {"experiment":"listwise_ensemble", "dataset":dataset_name(), "status":"success",
-                "split":"validation_only", "test_access":False,
-                "metrics":{k:float(v) for k,v in va.items()},
-                "confirmation_metrics":{k:float(v) for k,v in confirmation.items()},
-                "members":[{"checkpoint":p,"weight":w} for p,w in MEMBERS]}
+    if mode == "composition":
+        raise RuntimeError("unreachable composition branch")
     seed = int(cfg.get("seed", seed))
     model_cls = DualHeadFM if cfg.get("architecture") == "dual_head" and mode == "multitask" else GradientFM
     m=model_cls(dim,k=k,lr=lr,l2=l2,seed=seed); rng=np.random.default_rng(seed)
+    def ranking_scores(X):
+        base = m.predict(X)
+        mix = float(cfg.get("inference_aux_mix", 0.0))
+        if mix and isinstance(m, DualHeadFM):
+            aux = sigmoid(m.aux_predict(X))
+            return base + mix * (aux - np.mean(aux))
+        return base
     warmstart_loaded = False
     warmstart_note = None
     if os.environ.get("AGENT_USE_PRETRAINED", "0") == "1":
-        pretrained = None
-        if mode == "listwise":
+        pretrained = cfg.get("pretrained")
+        if mode == "listwise" and not pretrained:
             default_warmstart = os.path.join(outputs_dir(), "listwise_external_warmstart.npz")
             warmstart = cfg.get("pretrained") or default_warmstart
             if not os.path.isabs(warmstart):
@@ -158,7 +198,16 @@ def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patien
                         # not make a valid candidate fatal just because an
                         # optional warm-start has a different shape.
                         warmstart_note = "skipped_incompatible_listwise_warmstart"
-        if pretrained is not False:
+        if pretrained and mode != "listwise":
+            warmstart = pretrained
+            if not os.path.isabs(warmstart):
+                warmstart = os.path.join(ROOT, warmstart)
+            if os.path.exists(warmstart):
+                pretrained = warmstart
+            else:
+                warmstart_note = "skipped_missing_configured_warmstart"
+                pretrained = False
+        if pretrained is not False and not pretrained:
             pretrained = load_best_parameters(mode + "_fm")
         if pretrained and pretrained["V"].shape == m.V.shape and pretrained["W"].shape == m.W.shape:
             m.V[...] = pretrained["V"]; m.W[...] = pretrained["W"]; m.b = np.float32(pretrained["b"])
@@ -167,7 +216,7 @@ def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patien
     if warmstart_loaded:
         # A warm-start is a valid candidate in its own right. Fine-tuning may
         # not replace it with a lower validation score.
-        initial_metrics = evaluate(users, yva, m.predict(Xva))
+        initial_metrics = evaluate(users, yva, ranking_scores(Xva))
         best = float(initial_metrics["primary"])
         state = (m.V.copy(), m.W.copy(), m.b)
     for ep in range(1, epochs+1):
@@ -207,7 +256,22 @@ def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patien
                     ok=(fp<len(order))&(fn<len(order)); p=order[fp[ok]]; nidx=order[fn[ok]]
                     q=sigmoid(scores[p]-scores[nidx])-1.; bpr[p]=q; bpr[nidx]=-q
                     pw=float(cfg.get("pointwise_weight",.70)); rw=float(cfg.get("pairwise_weight",.25)); aw=float(cfg.get("auxiliary_weight",.05))
-                    primary=pw*grad+rw*bpr; aux=sigmoid(m.aux_predict(Xtr[ix]) if isinstance(m,DualHeadFM) else scores)-aux_tr["is_click"][ix]
+                    primary=pw*grad+rw*bpr
+                    aux_scores=sigmoid(m.aux_predict(Xtr[ix]) if isinstance(m,DualHeadFM) else scores)
+                    aux_tasks=cfg.get("auxiliary_tasks", ["is_click"])
+                    aux_weights=cfg.get("auxiliary_task_weights", {})
+                    total_aux_weight=sum(float(aux_weights.get(name, 1.0)) for name in aux_tasks) or 1.0
+                    aux_terms=[]
+                    for name in aux_tasks:
+                        residual=aux_scores-aux_tr[name][ix]
+                        if cfg.get("auxiliary_normalization") == "prevalence_rms":
+                            prevalence=float(np.mean(aux_tr[name]))
+                            scale=max(np.sqrt(prevalence*(1.0-prevalence)), 1e-3)
+                            residual=residual/scale
+                        aux_terms.append(float(aux_weights.get(name, 1.0)) / total_aux_weight * residual)
+                    aux=np.sum(aux_terms, axis=0)
+                    if cfg.get("auxiliary_normalization") == "prevalence_rms":
+                        aux=aux/(np.sqrt(np.mean(aux*aux))+1e-6)
                     if cfg.get("schedule")=="primary_first" and ep<=int(cfg.get("warmup_epochs",4)): aw=0.
                     if cfg.get("gradient_policy")=="project_aux":
                         primary_norm=float(np.dot(primary,primary))+1e-12; aux=aux-(float(np.dot(aux,primary))/primary_norm)*primary
@@ -218,11 +282,15 @@ def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patien
                     pred=sigmoid(scores); target=normalize_watch_time(play_tr[ix],dur_tr[ix])
                     grad=float(cfg.get("cwm_pointwise_weight",.80))*(pred-ytr[ix])+float(cfg.get("cwm_weight",.20))*np.where(ytr[ix]<1,np.minimum(0,pred-target+float(cfg.get("cwm_margin",0.))),pred-target)
                 losses.append(float(np.mean(grad*grad))); m.apply_logit_gradient(Xtr[ix],grad)
-        va=evaluate(users,yva,m.predict(Xva)); print(f"{mode} epoch {ep:02d} loss {np.mean(losses):.6f} validation {va}",flush=True)
-        if va["primary"]>best+1e-5: best=va["primary"]; state=(m.V.copy(),m.W.copy(),m.b); bad=0
+        va=evaluate(users,yva,ranking_scores(Xva)); print(f"{mode} epoch {ep:02d} loss {np.mean(losses):.6f} validation {va}",flush=True)
+        if va["primary"]>best+1e-5:
+            best=va["primary"]; state=(m.V.copy(),m.W.copy(),m.b,
+                                        getattr(m,"auxW",None).copy() if isinstance(m,DualHeadFM) else None); bad=0
         else: bad+=1
         if bad>=patience: break
-    m.V,m.W,m.b=state; scores=m.predict(Xva); va=evaluate(users,yva,scores)
+    m.V,m.W,m.b,aux_state=state
+    if isinstance(m,DualHeadFM) and aux_state is not None: m.auxW=aux_state
+    scores=ranking_scores(Xva); va=evaluate(users,yva,scores)
     confirmation=evaluate_confirmation(users,yva,scores)
     experiment = mode + "_fm"
     checkpoint = save_if_best(
@@ -233,6 +301,18 @@ def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patien
         config=cfg,
         source="agent/formal_trainer.py",
     )
+    # Optional independent artifact for an explicitly registered initial
+    # checkpoint. Keep it separate from the family canonical-best policy.
+    independent_name = cfg.get("independent_checkpoint")
+    if independent_name:
+        candidate = os.path.abspath(os.path.join(outputs_dir(), str(independent_name)))
+        outputs_root = os.path.abspath(outputs_dir())
+        if os.path.commonpath([candidate, outputs_root]) != outputs_root:
+            raise ValueError("independent checkpoint must stay under outputs_dir")
+        os.makedirs(outputs_root, exist_ok=True)
+        np.savez(candidate, V=m.V, W=m.W, b=np.asarray(m.b),
+                 auxW=getattr(m, "auxW", np.zeros_like(m.W)),
+                 config=json.dumps(cfg))
     return {"experiment":mode+"_fm","dataset":dataset_name(),"status":"success","split":"validation_only","test_access":False,
             "metrics":{k:float(v) for k,v in va.items()},"epochs":ep,"config":cfg,
             "confirmation_metrics":{k:float(v) for k,v in confirmation.items()},
@@ -241,9 +321,10 @@ def train(mode="listwise", limit=None, epochs=8, seed=0, batch_size=8192, patien
             "checkpoint_saved":checkpoint["checkpoint_saved"],
             "family_best_metrics":checkpoint.get("metrics", {})}
 
+
 if __name__=="__main__":
     ap=argparse.ArgumentParser()
-    ap.add_argument("--mode",choices=["listwise","listwise_ensemble","history","multitask","cwm"],required=True)
+    ap.add_argument("--mode",choices=["listwise","history","multitask","cwm","composition"],required=True)
     ap.add_argument("--limit",type=int); ap.add_argument("--epochs",type=int,default=8)
     ap.add_argument("--patience",type=int); ap.add_argument("--batch-size",type=int,default=8192)
     ap.add_argument("--seed",type=int,default=0)

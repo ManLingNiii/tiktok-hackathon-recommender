@@ -6,10 +6,10 @@
   "allowed_modules": [
     "bpr_loss",
     "listwise_loss",
-    "listwise_ensemble",
     "history_features",
     "multitask",
-    "censored_watch_time"
+    "censored_watch_time",
+    "composition"
   ],
   "allowed_paths": ["agent/modules/", "agent/configs/"],
   "forbidden_paths": ["kuairand-starter-kit/evaluate.py", "hidden_test"]

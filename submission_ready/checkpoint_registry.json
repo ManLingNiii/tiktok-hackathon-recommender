@@ -1,0 +1,58 @@
+{
+  "status": "offline_team_checkpoints",
+  "dataset": "KuaiRand-Pure",
+  "seed": 0,
+  "validation_only": true,
+  "test_used": false,
+  "metrics_verified_at_utc": "2026-08-30T14:26:24.5357505Z",
+  "metrics_evaluator": "agent/initial_checkpoint_evaluator.py + kuairand-starter-kit/evaluate.py",
+  "family_id_order": {
+    "1": "bpr_fm",
+    "2": "listwise_fm",
+    "3": "history_fm",
+    "4": "multitask_fm",
+    "5": "cwm_fm"
+  },
+  "families": {
+    "bpr_fm": {
+      "family_id": 1,
+      "checkpoint": "outputs/pure/bpr_initial.npz",
+      "source": "ManLingNiii/tiktok-hackathon-recommender:bpr_n_neg3_seed0",
+      "negative_sampling": "random_same_user",
+      "n_neg": 3,
+      "validation_metrics": {"GAUC": 0.6684, "nDCG@5": 0.5364, "primary": 0.6024},
+      "confirmation_metrics": null,
+      "confirmation_status": "not_available_in_bpr_branch_validation_only_record"
+    },
+    "listwise_fm": {
+      "family_id": 2,
+      "checkpoint": "outputs/pure/listwise_initial.npz",
+      "source": "offline_team_seed0",
+      "validation_metrics": {"GAUC": 0.6671480536460876, "nDCG@5": 0.535823404788971, "primary": 0.6014857292175293, "users": 22377.0, "rows": 124909.0},
+      "confirmation_metrics": {"GAUC": 0.6600850224494934, "nDCG@5": 0.530775249004364, "primary": 0.5954301357269287, "users": 5729.0, "rows": 32224.0}
+    },
+    "history_fm": {
+      "family_id": 3,
+      "checkpoint": "outputs/pure/history_fm_initial.npz",
+      "source": "ManLingNiii/tiktok-hackathon-recommender:history-final",
+      "selected_feature": "author_affinity_rate",
+      "validation_metrics": {"GAUC": 0.6684041619300842, "nDCG@5": 0.5366986989974976, "primary": 0.6025514602661133, "users": 22377.0, "rows": 124909.0},
+      "confirmation_metrics": {"GAUC": 0.6616471409797668, "nDCG@5": 0.5317275524139404, "primary": 0.5966873168945312, "users": 5729.0, "rows": 32224.0},
+      "confirmation_status": "evaluated_by_local_confirmation_guard"
+    },
+    "multitask_fm": {
+      "family_id": 4,
+      "checkpoint": "outputs/pure/multitask_initial.npz",
+      "source": "local_autonomous_multitask_initial",
+      "validation_metrics": {"GAUC": 0.67097407579422, "nDCG@5": 0.537966251373291, "primary": 0.6044701337814331, "users": 22377.0, "rows": 124909.0},
+      "confirmation_metrics": {"GAUC": 0.6650501489639282, "nDCG@5": 0.533405601978302, "primary": 0.5992279052734375, "users": 5729.0, "rows": 32224.0}
+    },
+    "cwm_fm": {
+      "family_id": 5,
+      "checkpoint": "outputs/pure/cwm_initial.npz",
+      "source": "offline_team_seed0",
+      "validation_metrics": {"GAUC": 0.6673935055732727, "nDCG@5": 0.5360676050186157, "primary": 0.6017305850982666, "users": 22377.0, "rows": 124909.0},
+      "confirmation_metrics": {"GAUC": 0.6606566309928894, "nDCG@5": 0.5317211151123047, "primary": 0.5961889028549194, "users": 5729.0, "rows": 32224.0}
+    }
+  }
+}
