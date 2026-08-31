@@ -10,7 +10,7 @@
 ## 必須留在本地
 
 - `runs/`、非 frozen 的 `outputs/`、`*.csv`
-- 原始資料與壓縮資料集
+- 原始資料與壓縮資料集（一般 branch；`full-system` branch 依需求以 Git LFS 管理 KuaiRand-Pure CSV）
 - `.env`、API key、token、private key
 - transfer zip 與本機 logs／patches
 
@@ -26,4 +26,4 @@ git status --short
 git diff --cached --name-only
 ```
 
-確認 `git lfs ls-files` 顯示所有 frozen weights，且不要使用 `git add -f` 將 dataset、非 frozen checkpoint 或 submission CSV 加入 commit。此檔案只提供準備清單，不會自動 commit 或 push。
+確認 `git lfs ls-files` 顯示所有 frozen weights 與 `full-system` branch 的 KuaiRand-Pure CSV，且不要使用 `git add -f` 將非 frozen checkpoint 或 submission CSV 加入 commit。此檔案只提供準備清單，不會自動 commit 或 push。

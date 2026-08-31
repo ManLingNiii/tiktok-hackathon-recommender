@@ -38,9 +38,9 @@ conda activate tiktok
 cd <repository-root>
 ```
 
-將主辦方提供的 KuaiRand-Pure 資料放在 `kuairand-starter-kit\KuaiRand-Pure\data\`。原始資料不放入 GitHub。
+將主辦方提供的 KuaiRand-Pure 資料放在 `kuairand-starter-kit\KuaiRand-Pure\data\`。`full-system` branch 依需求使用 Git LFS 包含這些 CSV；其他 branch 可維持不包含資料集的輕量版本。
 
-Clone 後仍需自行放入 KuaiRand-Pure 資料；GitHub 只包含可執行的程式、設定與 frozen checkpoint，不包含原始資料、API key 或本地 runs。
+Clone `full-system` 後需先安裝並啟用 Git LFS，再執行 `git lfs pull` 取得資料與 frozen checkpoint。API key、runs、submission CSV 與 `others/` 封存內容不會上傳。
 
 ## 單一 validation 實驗
 
